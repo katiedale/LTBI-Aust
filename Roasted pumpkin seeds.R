@@ -1,3 +1,3 @@
 Roasted pumpkin seeds
-For get the kipper
+Forget the kipper
 Get the gun
