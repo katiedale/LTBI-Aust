@@ -26,14 +26,14 @@ library(reshape2)
 #############################################################################
 
 
-
-#Loading the the Australian 2006 Census data
+#Loading the the Australian Census data - pick a year and choose relevant location
 ####################################################################
 #Aust <- read.csv("H:\\Katie\\PhD\\ABS data\\Australia 2006\\Australia 2006.csv",skip=9,header=T)
 #Aust <- read.csv("H:\\Katie\\PhD\\ABS data\\Australia 2011\\Australia 2011.csv",skip=9,header=T)
 #Aust <- read.csv("H:\\Katie\\PhD\\ABS data\\Australia 2016\\Australia 2016.csv",skip=10,header=T)
+#Aust<-read.csv('data/Australia 2006.csv',skip=9,header=T)
+#Aust<-read.csv('data/Australia 2011.csv',skip=9,header=T)
 ####################################################################
-
 
 #Replace the first two column names to become age and yoa
 colnames(Aust)[1] <- "age"
@@ -168,8 +168,11 @@ unique(Aust$cob)
 ##Removing any rows with no population 
 Aust <- Aust[Aust$pop!= 0, ]
 
-#Loading the hazard data
-load("H:\\Katie\\PhD\\Houben and Dodd\\AAA_rundata-1.Rdata")
+#Loading the hazard data - choose relevant location
+####################################################################
+#load("H:\\Katie\\PhD\\Houben and Dodd\\AAA_rundata-1.Rdata")
+#load('data/AAA_rundata-1.Rdata')
+####################################################################
 tbhaz<-rundata
 rm(rundata)
 
