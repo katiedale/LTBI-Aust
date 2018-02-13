@@ -20,7 +20,7 @@
 #library(countrycode)
 #library(ggplot2)
 #library(reshape2)
-
+#changedgfdgbafbh
 #for missing data analysis
 #install.packages("mice")
 #install.packages("lattice")
@@ -248,7 +248,7 @@ Aust[Aust$cob == "Australia..includes.External.Territories...nfd","iso3":="AUS"]
 Aust[Aust$cob == "Norfolk.Island","iso3":="AUS"]
 Aust[Aust$cob == "Australian.External.Territories..nec","iso3":="AUS"]
 Aust[Aust$cob == "Channel.Islands","iso3":="GBR"]
-Aust[Aust$cob == "RÃ.union","iso3":="FRA"]
+Aust[Aust$cob == "R?.union","iso3":="FRA"]
 Aust[Aust$cob == "Oceania.and.Antarctica..nfd","iso3":="NZL"]
 
 #Removing yoa for Norfolk Islanders since I've made their iso3 Australia anyway
@@ -715,7 +715,7 @@ Aust[Aust$cob == "Australia..includes.External.Territories...nfd","iso3":="AUS"]
 Aust[Aust$cob == "Norfolk.Island","iso3":="AUS"]
 Aust[Aust$cob == "Australian.External.Territories..nec","iso3":="AUS"]
 Aust[Aust$cob == "Channel.Islands","iso3":="GBR"]
-Aust[Aust$cob == "RÃ.union","iso3":="FRA"]
+Aust[Aust$cob == "R?.union","iso3":="FRA"]
 Aust[Aust$cob == "Oceania.and.Antarctica..nfd","iso3":="NZL"]
 
 #Removing yoa for Norfolk Islanders since I've made their iso3 Australia anyway
@@ -1185,7 +1185,7 @@ Aust[Aust$cob == "Australia..includes.External.Territories...nfd","iso3":="AUS"]
 Aust[Aust$cob == "Norfolk.Island","iso3":="AUS"]
 Aust[Aust$cob == "Australian.External.Territories..nec","iso3":="AUS"]
 Aust[Aust$cob == "Channel.Islands","iso3":="GBR"]
-Aust[Aust$cob == "RÃ.union","iso3":="FRA"]
+Aust[Aust$cob == "R?.union","iso3":="FRA"]
 Aust[Aust$cob == "Oceania.and.Antarctica..nfd","iso3":="NZL"]
 
 #Removing yoa for Norfolk Islanders since I've made their iso3 Australia anyway
