@@ -1,0 +1,1763 @@
+#install.packages("swirl")
+#install.packages("dplyr")
+#install.packages("ggplot2")
+#install.packages ("quantmod")
+#install.packages ("sm")
+#install.packages("countrycode")
+#install.packages("stringr")
+#install.packages("reshape2")
+#install.packages("zoo") 
+#install.packages("data.table")
+#install.packages("plyr")
+library(zoo)
+library(plyr)
+library(data.table)
+library(stringr)
+library(quantmod)
+library(dplyr)
+library(sm)
+library(reshape2)
+library(countrycode)
+library(ggplot2)
+library(reshape2)
+
+#for missing data analysis
+#install.packages("mice")
+#install.packages("lattice")
+#install.packages("VIM")
+#library(mice)
+#library(lattice)
+#library(VIM)
+
+
+#Loading the hazard data - choose relevant location
+####################################################################
+load("H:\\Katie\\PhD\\Houben and Dodd\\LARI.Rdata")
+#load('data/AAA_rundata-1.Rdata')
+#load('data/AAA_rundata-1.Rdata')
+####################################################################
+tbhaz<-as.data.table(LARI)
+rm(LARI)
+
+##Create an FOI variable
+tbhaz$FOI <- exp(tbhaz$lari)
+tbhaz[, "lari":=NULL]
+
+##Subset all 2014 rows so I can create 
+# 2015 and 2016 data with the same data and then append them on
+tbhaz2014 <- subset(tbhaz, tbhaz$year==2014)
+tbhaz2015 <- tbhaz2014
+tbhaz2015$year[tbhaz2015$year==2014] <- 2015
+tbhaz2016 <- tbhaz2014
+tbhaz2016$year[tbhaz2016$year==2014] <- 2016
+rm(tbhaz2014)
+tbhaz1516<-rbind(tbhaz2015,tbhaz2016)
+tbhaz<-rbind(tbhaz1516,tbhaz)
+tbhaz<-tbhaz[order(tbhaz$iso3,tbhaz$replicate,tbhaz$year), ]
+rownames(tbhaz) <- seq(length=nrow(tbhaz))
+rm(tbhaz1516)
+rm(tbhaz2015)
+rm(tbhaz2016)
+
+##For pre-1934 data only, subset all 1934 rows so I can create 
+# pre-1934 data and then append them on
+tbhaz1934 <- subset(tbhaz, tbhaz$year==1934)
+tbhaz1934<-tbhaz1934[,1:4]
+df<-tbhaz1934
+for(i in 1:45) {
+  dfnew<-tbhaz1934
+  dfnew$year[dfnew$year==1934] <- 1934-i
+  df<-rbind(dfnew,df)
+}
+df<-df[df$year!=1934,]
+#unique(df$year)
+#unique(df$iso3)  
+#217 levels
+tbhaz<-rbind(df,tbhaz)
+tbhaz<-tbhaz[order(tbhaz$iso3,tbhaz$replicate,tbhaz$year), ]
+rownames(tbhaz) <- seq(length=nrow(tbhaz))
+rm(tbhaz1934)
+#unique(tbhaz$year)
+#unique(tbhaz$iso3) 
+rm(df)
+rm(dfnew)
+###Create cumulative sum variable for the hazards.
+tbhaz<-as.data.table(tbhaz)
+tbhaz[, cumhaz := cumsum(FOI), by=list(iso3, replicate)]
+tbhazref<-copy(tbhaz)
+rm(tbhaz)
+
+
+#Loading the the Australian Census data - choose relevant location
+####################################################################
+Aust <- read.csv("H:\\Katie\\PhD\\ABS data\\Australia 2006\\Australia 2006.csv",skip=9,header=T)
+#Aust <- read.csv("H:\\Katie\\PhD\\ABS data\\Australia 2011\\Australia 2011.csv",skip=9,header=T)
+#Aust <- read.csv("H:\\Katie\\PhD\\ABS data\\Australia 2016\\Australia 2016.csv",skip=10,header=T)
+#Aust<-read.csv('data/Australia 2006.csv',skip=9,header=T)
+#Aust<-read.csv('data/Australia 2011.csv',skip=9,header=T)
+####################################################################
+Aust<-as.data.table(Aust)
+
+#Replace the first two column names to become age and yoa
+colnames(Aust)[1] <- "age"
+colnames(Aust)[2] <- "yoa"
+
+# Function for filling down the blank rows in the age column
+filltheblanks <- function(x, missing=""){
+  rle <- rle(as.character(x))
+  empty <- which(rle$value==missing)
+  rle$values[empty] <- rle$value[empty-1] 
+  inverse.rle(rle)
+}
+Aust$age <- filltheblanks(Aust$age)
+
+
+#Getting rid of rows that aren't needed
+Aust <- Aust[age!="Age in Single Years (AGEP)"]
+Aust <- Aust[age!="AGEP - Age in Single Years"]
+Aust <- Aust[age!="AGEP Age"]
+Aust <- Aust[age!="(c) Commonwealth of Australia 2016", ]
+Aust <- Aust[age!="(c) Commonwealth of Australia 2017", ]
+Aust <- Aust[yoa!="YARP Year of Arrival in Australia", ]
+Aust <- Aust[yoa!="Year of Arrival in Australia (YARP)", ]
+Aust <- Aust[age!="Total", ]
+Aust <- Aust[age!="Data Source: 2006 Census of Population and Housing", ]
+Aust <- Aust[age!="Data Source: 2011 Census of Population and Housing", ]
+Aust <- Aust[age!="INFO", ]
+
+#Getting rid of the characters in age columns and make them all numeric
+Aust$age <- gsub("\\D","",Aust$age)
+Aust$age<-as.numeric(Aust$age)
+
+##Creating a variable with 2006/2011/2016 in it, 
+# so I can minus the age values from it later on
+# to obtain year of birth (yob)
+Aust$yoa<-as.character(Aust$yoa)
+Aust$yoa[Aust$yoa=="Arrived 1 Jan 2011 - 9 August 2011"]<-"2011"
+Aust$yoa2 <-Aust$yoa
+Aust$yoa2 <- gsub("\\D","",Aust$yoa2)
+Aust$yoa2 <-as.numeric(Aust$yoa2)
+censusyear<-max(Aust$yoa2, na.rm=T)
+Aust$yoa2<-NULL
+
+#Sorting year of arrival column
+Aust$yoa<-as.character(Aust$yoa)
+#Make all "Overseas visitor" having arrived in the year prior to the census
+#I think this is only included as a category in 2016
+if(censusyear==2006) {
+  Aust$yoa[Aust$yoa=="Overseas visitor"]<-"Arrived 2005"
+} else if (censusyear==2011) {
+  Aust$yoa[Aust$yoa=="Overseas visitor"]<-"Arrived 2010"
+} else if (censusyear==2016) {
+  Aust$yoa[Aust$yoa=="Overseas visitor"]<-"Arrived 2015"
+}
+Aust$yoa <- gsub("\\D","",Aust$yoa)
+Aust$yoa<-as.numeric(Aust$yoa)
+
+#Reshape, of country of birth becomes one column
+Aust<- melt(Aust, id=c("age", "yoa"))
+
+##Renaming country of birth (cob) variable
+names(Aust)[names(Aust)=="variable"] <- "cob"
+names(Aust)[names(Aust)=="value"] <- "pop"
+#unique(Aust$cob)
+Aust <- Aust[Aust$cob!="Total", ]
+Aust$pop<-as.numeric(Aust$pop)
+sum(Aust$pop)
+#2006 19,855,249
+#2011 21,507,670
+#2016 23,612,655
+
+##Creating a censusdate variable so I can
+# minus the age values from it to obtain year of birth (yob)
+Aust$censusdate<-censusyear
+Aust$yob<-Aust$censusdate-Aust$age
+Aust[, "censusdate":=NULL]
+
+#Changing the FOI for the census year so that it represents 
+# only part of the year to the date of the census
+tbhaz<-copy(tbhazref)
+tbhaz$testari<-tbhaz$FOI*(220/365.2425)
+if(censusyear==2006) {
+  tbhaz$FOI[tbhaz$year==2011]<-tbhaz$testari[tbhaz$year==2011]
+} else if (censusyear==2011) {
+  tbhaz$FOI[tbhaz$year==2011]<-tbhaz$testari[tbhaz$year==2011]
+} else if (censusyear==2016) {
+  tbhaz$FOI[tbhaz$year==2016]<-tbhaz$testari[tbhaz$year==2016]
+}
+tbhaz[, "testari":=NULL]
+
+##Creating a column of iso3 codes 
+Aust$iso3<-countrycode(Aust$cob, "country.name", "iso3c")
+
+##Fixing iso3 codes for those that didn't convert
+Aust[Aust$cob == "At.sea","cob":=NA]
+Aust[Aust$cob == "Not.stated","iso3":= NA]
+Aust[Aust$cob == "Not applicable","iso3":= NA]
+Aust[Aust$cob == "Not.elsewhere.classified","iso3":= NA]
+Aust[Aust$cob == "Overseas.visitor","iso3":=NA]
+Aust[Aust$cob == "Inadequately.described","iso3":=NA]
+Aust[Aust$cob == "China..excludes.SARs.and.Taiwan.Province.","iso3":= "CHN"]
+Aust[Aust$cob == "Japan.and.the.Koreas..nfd","iso3":= "JPN"]
+Aust[Aust$cob == "United.Kingdom..Channel.Islands.and.Isle.of.Man..nfd","iso3":= "GBR"]
+Aust[Aust$cob == "Virgin.Islands..United.States","iso3":= "USA"]
+Aust[Aust$cob == "Americas..nfd","iso3":="USA"]
+Aust[Aust$cob == "British.Antarctic.Territory","iso3":="GBR"]
+Aust[Aust$cob == "Caribbean..nfd","iso3":="BHS"]
+Aust[Aust$cob == "Central.America..nfd","iso3":="CRI"]
+Aust[Aust$cob == "Central.and.West.Africa..nfd","iso3":="CMR"]
+Aust[Aust$cob == "Central.Asia..nfd","iso3":="KAZ"]
+Aust[Aust$cob == "Eastern.Europe..nfd","iso3":="POL"]
+Aust[Aust$cob == "England","iso3":="GBR"]
+Aust[Aust$cob == "Japan.and.the.Koreas..nfd","iso3":="JPN"]
+Aust[Aust$cob == "Kosovo","iso3":="SRB"]
+Aust[Aust$cob == "Mainland.South.East.Asia..nfd","iso3":="THA"]
+Aust[Aust$cob == "Maritime.South.East.Asia..nfd","iso3":="PHL"]
+Aust[Aust$cob == "Melanesia..nfd","iso3":="VUT"]
+Aust[Aust$cob == "Micronesia..nfd","iso3":="KIR"]
+Aust[Aust$cob == "Middle.East..nfd","iso3":="SAU"]
+Aust[Aust$cob == "North.Africa..nfd","iso3":="MAR"]
+Aust[Aust$cob == "North.Africa.and.the.Middle.East..nfd","iso3":="EGY"]
+Aust[Aust$cob == "North.East.Asia..nfd","iso3":="MNG"]
+Aust[Aust$cob == "North.West.Europe..nfd","iso3":="FRA"]
+Aust[Aust$cob == "Northern.America..nfd","iso3":="USA"]
+Aust[Aust$cob == "Northern.Europe..nfd","iso3":="NLD"]
+Aust[Aust$cob == "Polynesia..excludes.Hawaii...nec","iso3":="WSM"]
+Aust[Aust$cob == "Polynesia..excludes.Hawaii...nfd","iso3":="WSM"]
+Aust[Aust$cob == "Scotland South.America..nec","iso3":="GBR"]
+Aust[Aust$cob == "South.America..nfd","iso3":="BRA"]
+Aust[Aust$cob == "South.East.Asia..nfd","iso3":="THA"]
+Aust[Aust$cob == "South.Eastern.Europe..nfd","iso3":="MKD"]
+Aust[Aust$cob == "Southern.and.Central.Asia..nfd","iso3":="AFG"]
+Aust[Aust$cob == "Southern.and.East.Africa..nec","iso3":="SOM"]
+Aust[Aust$cob == "Southern.and.East.Africa..nfd","iso3":="SOM"]
+Aust[Aust$cob == "Southern.and.Eastern.Europe..nfd","iso3":="MKD"]
+Aust[Aust$cob == "Southern.Asia..nfd","iso3":="IND"]
+Aust[Aust$cob == "Southern.Europe..nfd","iso3":="GRC"]
+Aust[Aust$cob == "Spanish.North.Africa","iso3":="ESP"]
+Aust[Aust$cob == "Sub.Saharan.Africa..nfd","iso3":="SOM"]
+Aust[Aust$cob == "United.Kingdom..Channel.Islands.and.Isle.of.Man..nf","iso3":="GBR"]
+Aust[Aust$cob == "Scotland","iso3":="GBR"]
+Aust[Aust$cob == "Wales","iso3":="GBR"]
+Aust[Aust$cob == "Western.Europe..nfd","iso3":="FRA"]
+Aust[Aust$cob == "South.America..nec","iso3":="BRA"]
+Aust[Aust$cob == "China..excludes.SARs.and.Taiwan.","iso3":="CHN"]
+Aust[Aust$cob == "Australia..includes.External.Territories...nfd","iso3":="AUS"] 
+Aust[Aust$cob == "Norfolk.Island","iso3":="AUS"]
+Aust[Aust$cob == "Australian.External.Territories..nec","iso3":="AUS"]
+Aust[Aust$cob == "Channel.Islands","iso3":="GBR"]
+Aust[Aust$cob == "RÃ.union","iso3":="FRA"]
+Aust[Aust$cob == "Oceania.and.Antarctica..nfd","iso3":="NZL"]
+
+#Removing yoa for Norfolk Islanders since I've made their iso3 Australia anyway
+Aust[Aust$cob == "Norfolk.Island","yoa":=NA]
+
+#unique(Aust$cob)
+
+##Removing any rows with no population 
+Aust <- Aust[pop!= 0]
+
+##Comparing ISO3 codes in TBhaz versus census to see what iso3 need to be converted
+# because they aren't included in Houben and Dodd's dataset
+#missinginours<-setdiff(tbhaz$iso3, Aust$iso3)
+#missinginours<-countrycode(missinginours, "iso3c","country.name")
+#missinginours
+
+#missingintheirs<-setdiff(Aust$iso3,tbhaz$iso3)
+#missingintheirs<-countrycode(missingintheirs, "iso3c","country.name")
+#missingintheirs
+
+#rm(missinginours)
+#rm(missingintheirs)
+
+#Converting cob not represented in Dodd's data to others that are
+Aust[Aust$iso3 == "IMN","iso3":= "GBR" ] #Isle of Man
+Aust[Aust$iso3 == "GGY","iso3":= "GBR" ] #Guernsey
+Aust[Aust$iso3 == "JEY","iso3":= "GBR" ] #Jersey
+Aust[Aust$iso3 == "GIB","iso3":= "ESP" ] #Gibraltar
+Aust[Aust$iso3 == "TWN","iso3":= "CHN" ] #Taiwan
+Aust[Aust$iso3 == "SHN","iso3":= "GBR" ] #Saint Helena
+Aust[Aust$iso3 == "FLK","iso3":= "GBR" ] #Falkland Islands (Malvinas)
+Aust[Aust$iso3 == "REU","iso3":= "FRA" ] #Reunion
+Aust[Aust$iso3 == "NFK","iso3":= "AUS" ] #Norfolk Island
+Aust[Aust$iso3 == "ATA","iso3":= "GBR" ] #Antarctica
+
+Aust[Aust$iso3 == "LIE","iso3":= "AUT" ] #Liechtenstein
+Aust[Aust$iso3 == "FRO","iso3":= "NOR" ] #Faroe Islands
+Aust[Aust$iso3 == "VAT","iso3":= "ITA" ] #Holy See (Vatican City State)
+Aust[Aust$iso3 == "ESH","iso3":= "MAR" ] #Western Sahara
+Aust[Aust$iso3 == "SPM","iso3":= "FRA" ] #Saint Pierre and Miquelon
+Aust[Aust$iso3 == "TWN","iso3":= "CHN" ] #Taiwan, Province of China
+Aust[Aust$iso3 == "GLP","iso3":= "FRA" ] #Guadeloupe
+Aust[Aust$iso3 == "GUF","iso3":= "FRA" ] #French Guiana
+Aust[Aust$iso3 == "MTQ","iso3":= "FRA" ] #Martinique
+Aust[Aust$iso3 == "MYT","iso3":= "FRA" ] #Mayotte
+Aust[Aust$iso3 == "SHN","iso3":= "GBR" ] #Saint Helena, Ascension and Tristan da Cunha
+
+
+#aggregate all the rows that hacen ended being the same
+Aust <- data.table(Aust)
+Aust <- Aust[, list(pop=sum(pop)), 
+             by=c("age", "yoa", "cob", "yob", "iso3")]
+
+
+#########CODE FOR DEVLOPING RECENT INFECTION DATASET################
+#Changing the FOI for 2014, so that represents part of the year only
+#tbhaz$testari<-tbhaz$FOI*(220/365.2425)
+#tbhaz$FOI[tbhaz$year==2014]<-tbhaz$testari[tbhaz$year==2014]
+#tbhaz["testari"]<- NULL
+
+#Changing the FOI for 2015 and 2016 to zero
+#tbhaz$FOI[tbhaz$year==2016]<-0
+#tbhaz$FOI[tbhaz$year==2015]<-0
+
+sum(Aust$pop)
+#total population
+#2006 - 19,855,249
+#2011 - 21,507,670
+#2016 - 23,612,655
+
+
+
+sum(Aust$pop[is.na(Aust$yoa)&(Aust$iso3!="AUS")& !is.na(Aust$iso3)],na.rm=TRUE)
+#Missing yoa only, not Australian: 
+#2006 - 210,725
+#2011 - 234,766
+#2016 - 207,978
+
+sum(Aust$pop[is.na(Aust$iso3)& !is.na(Aust$yoa)],na.rm=TRUE)
+#Missing iso3 only: 
+#2006 - 9,184
+#2011 - 8318
+#2016 - 327,069
+
+sum(Aust$pop[is.na(Aust$iso3)& is.na(Aust$yoa)],na.rm=TRUE)
+#Missing both yoa and iso3 only: 
+#2006 - 1,367,763
+#2011 - 1,197,204
+#2016 - 1,624,443
+
+
+##Subsetting all rows with NA in yoa and those born in Ausralia 
+Austborn <- subset(Aust, Aust$iso3=="AUS")
+Austborn$yoa<-NULL
+sum(Austborn$pop)
+#2006 - 14,072,762
+#2011 - 15,021,457
+#2016 - 15,615,550
+#str(Austborn)
+
+
+##Subsetting all rows with NA in yoa, but a country of birth, 
+#and all those with yoa, but not country of birth
+#i.e. they were born overseas but we don't know when 
+#they migrated, or where they migrated from.
+AustNA <- subset(Aust, (is.na(Aust$yoa)& Aust$iso!="AUS")|is.na(Aust$iso3))
+sum(AustNA$pop)
+#2006 - 1,376,947
+#2011 - 1,440,288
+#2016 - 2,159,490
+
+##Removing all rows with anything missing 
+Aust <- subset(Aust,!is.na(Aust$yoa) & !is.na(Aust$iso3))
+sum(Aust$pop,na.rm=TRUE)
+#2006 - 4,194,815
+#2011 - 5,045,925
+#2016 - 5,837,615
+
+sum(Austborn$pop,na.rm=TRUE)+sum(Aust$pop,na.rm=TRUE)+sum(AustNA$pop,na.rm=TRUE)
+#2006 - 19,855,249
+#2011 - 21,507,670
+#2016 - 23,612,655
+
+
+sum(Austborn$pop,na.rm=TRUE)+sum(Aust$pop,na.rm=TRUE)
+#2006 - 18,267,577
+#2011 - 20,067,382
+#2016 - 21,453,165
+
+rm(AustNA)
+
+#Reorder columns by country (alphabetical), yob (ascending), yoa (ascending) 
+Aust<-Aust[order(Aust$iso3,Aust$yob,Aust$yoa), ]
+Austborn<-Austborn[order(Austborn$yob), ]
+##Creating unique IDs
+Aust$id <- seq.int(nrow(Aust))
+Austborn$id <- seq.int(nrow(Austborn))
+
+###THE JUDICIOUS MERGE SOLUTION
+### AUSTRALIAN BORN - 5000 replicate DATASET
+
+##Make them all datatables
+Austborn<-as.data.table(Austborn)
+
+##Order them all properly
+tbhaz<-tbhaz[order(iso3,replicate,year)]
+Austborn<-Austborn[order(yob)]
+
+#subset Australian hazards
+tbhzAust <- tbhaz[tbhaz$iso3=="AUS",]  
+tbhzAust<-as.data.table(tbhzAust)
+
+#Creating the year of birth data table (and dividing the hazards in half)...
+tbhazl<-tbhzAust[,1:4]
+tbhazl<-dcast(tbhazl, year+iso3~replicate)
+yob<-merge(Austborn, tbhazl, by.x = c("yob","iso3"), by.y = c("year","iso3"), all.x=TRUE, all.y=FALSE)
+yob<-data.table(yob)
+yob[ , (7:5006) :=lapply(.SD, "*", 0.5), .SDcols =c(7:5006)]
+yob<-yob[order(iso3,yob)]
+
+#Years between year of birth and census year ...
+# Subtracting the cumulative hazard in the census year from the 
+# cumulative hazard in the year of birth
+tbhazl<-tbhzAust[,c(1,2,3,5)]
+tbhazl<-dcast(tbhazl, year~replicate)
+# creating data table with cumulative hazard in the year of birth
+yobcmsm<-merge(Austborn, tbhazl, by.x = c("yob"), by.y = c("year"), all.x=TRUE, all.y=FALSE)
+yobcmsm<-yobcmsm[order(iso3,yob)]
+# creating data table with cumulative hazard in the censusyear
+Austborn<-Austborn[, censyear := censusyear]
+censcmsm<-merge(Austborn, tbhazl, by.x = c("censyear"), by.y = c("year"), all.x=TRUE, all.y=FALSE)
+censcmsm<-censcmsm[order(iso3,yob)]
+Austborn[, "censyear":=NULL]
+#subtracting one from the other
+a<-censcmsm[,8:5007]
+b<-yobcmsm[,7:5006]
+yobtocens<-a- b
+rm(a)
+rm(b)
+rm(censcmsm)
+rm(yobcmsm)
+
+#Merging it to the Australian census data information
+yobtocens$id <- seq.int(nrow(yobtocens))
+yobtocens <- merge(Austborn[,1:6], yobtocens,by=c('id'))
+
+##Adding up all of the hazards!!! i.e. yob+yobtocens
+a<-yob[,7:5006]
+b<-yobtocens[,7:5006]
+Austbornrisk5<-a+b
+rm(a)
+rm(b)
+#Merging it to the Australian census data information
+Austbornrisk5$id <- seq.int(nrow(Austbornrisk5))
+Austbornrisk5 <- merge(Austborn[,1:6], Austbornrisk5,by=c('id'))
+rm(yob)
+rm(yobtocens)
+rm(tbhazl)
+
+#Create function to turn the hazards into risks
+haztorisk<-function(v) {
+  1-(exp(-v))
+}
+
+#Apply the above function to every element of the datatable
+Austbornrisk5[ , (7:5006) :=lapply(.SD,haztorisk), .SDcols =c(7:5006)]
+
+#Rename column variables in Austrisk
+Vcolnam <- paste0(c("V"),1:5000)
+colnames(Austbornrisk5)[7:5006] <- Vcolnam
+
+
+
+
+####THE REST OF THE WORLD
+####5000 replicate ones
+##Make them all datatables
+Aust<-as.data.table(Aust)
+
+gc()
+##Remove the relevant countries from the dataset 
+newcnty<-c("CHN", "GBR", "IND", "MYS", "PHL", "VNM")
+
+'%!in%' <- function(x,y)!('%in%'(x,y))
+Aust5<-Aust[Aust$iso %in% newcnty,]
+Aust<-Aust[Aust$iso %!in% newcnty,]
+Aust<-Aust[Aust$iso!="AUS",]
+
+#Sort and order them and add id columns
+Aust<-Aust[order(iso3,yob,yoa)]
+Aust$id <- seq.int(nrow(Aust))
+Aust5<-Aust5[order(iso3,yob,yoa)]
+Aust5$id <- seq.int(nrow(Aust5))
+
+#Creating the year of birth data table (and dividing the hazards in half)...
+tbhazl<-tbhaz[,1:4]
+tbhazl<-dcast(tbhazl, year+iso3~replicate)
+yob<-merge(Aust5, tbhazl, by.x = c("yob","iso3"), by.y = c("year","iso3"), all.x=TRUE, all.y=FALSE)
+yob<-data.table(yob)
+yob[ , (8:5007) :=lapply(.SD, "*", 0.5), .SDcols =c(8:5007)]
+yob<-yob[order(iso3,yob,yoa)]
+## half the values again in the rows where yob equals yoa 
+yob[yob==yoa, (8:5007) :=lapply(.SD, "*", 0.5), .SDcols =c(8:5007)]
+##subset those rows
+subyob <- subset(yob, yob==yoa)
+## create a new datatable containing a quarter of the Australia hazard for year of arrival
+tbhazl<-tbhzAust[,c(1,3,4)]
+tbhazl<-dcast(tbhazl, year~replicate)
+yoaA<-merge(Aust5, tbhazl, by.x = c("yoa"), by.y = c("year"), all.x=TRUE, all.y=FALSE)
+yoaA[ , (8:5007) :=lapply(.SD, "*", 0.25), .SDcols =c(8:5007)]
+yoaA<-yoaA[order(iso3,yob,yoa)]
+#subset this data table and add it to the yob datatable I subsetted above
+subyoaA <- subset(yoaA, yob==yoa)
+subyob<-subyob[,8:5007]+subyoaA[,8:5007]
+subyob$id2 <- seq.int(nrow(subyob))
+subyoaA$id2 <- seq.int(nrow(subyoaA))
+#Merging it to the Australian census data information
+subyob <- merge(subyoaA[,c(1:7,5008)], subyob,by=c('id2'))
+subyob[, "id2":=NULL]
+# bind it back onto the original datatable for yob and order
+yob <- yob[yob!=yoa]
+yob<- rbind(yob, subyob)
+yob<-yob[order(iso3,yob,yoa)]
+rm(subyob)
+rm(subyoaA)
+rm(yoaA)
+
+#Years between year of birth and year of arrival ...
+# Subtracting the cumulative hazard in the year of birth from the 
+# cumulative hazard in the year before arrival
+tbhazl<-tbhaz[,c(1,2,3,5)]# extract the cumhaz column (7) from tbhaz
+tbhazl<-dcast(tbhazl, year+iso3~replicate)
+# creating data table with cumulative hazard in the year of birth
+yobcmsm<-merge(Aust5, tbhazl, by.x = c("yob","iso3"), by.y = c("year","iso3"), all.x=TRUE, all.y=FALSE)
+yobcmsm<-yobcmsm[order(iso3,yob,yoa)]
+# creating data table with cumulative hazard in the year before arrival
+Aust5[, yoam1 := yoa-1]
+yoam1cmsm<-merge(Aust5, tbhazl, by.x = c("yoam1","iso3"), by.y = c("year","iso3"), all.x=TRUE, all.y=FALSE)
+yoam1cmsm<-yoam1cmsm[order(iso3,yob,yoa)]
+#subtracting one from the other
+a<-yoam1cmsm[,9:5008]
+b<-yobcmsm[,8:5007]
+yobtoyoa<-a-b
+rm(a)
+rm(b)
+rm(yoam1cmsm)
+rm(yobcmsm)
+Aust5[, "yoam1":=NULL]
+yobtoyoa$id <- seq.int(nrow(yobtoyoa))
+#Merging it to the Australian census data information
+yobtoyoa <- merge(Aust5[,1:7], yobtoyoa,by=c('id'))
+## remove the hazard values in the rows where yob equals yoa, 
+#because I sorted their hazard values above
+yobtoyoa[yob==yoa, (8:5007) :=lapply(.SD, "*", 0), .SDcols =c(8:5007)]
+
+##Year of arrival hazard in the country of birth (and dividing the hazards in half)...
+tbhazl<-tbhaz[,1:4]
+tbhazl<-dcast(tbhazl, year+iso3~replicate)
+yoa<-merge(Aust5, tbhazl, by.x = c("yoa","iso3"), by.y = c("year","iso3"), all.x=TRUE, all.y=FALSE)
+yoa<-data.table(yoa)
+yoa[,(8:5007) :=lapply(.SD, "*", 0.5),.SDcols =c(8:5007)]
+yoa<-yoa[order(iso3,yob,yoa)]
+
+##Year of arrival hazard in Australia (and dividing the hazards in half)...
+tbhazl<-tbhzAust[,c(1,3,4)]
+tbhazl<-dcast(tbhazl, year~replicate)
+yoaA<-merge(Aust5, tbhazl, by.x = c("yoa"), by.y = c("year"), all.x=TRUE, all.y=FALSE)
+yoaA<-data.table(yoaA)
+yoaA[ , (8:5007) :=lapply(.SD, "*", 0.5), .SDcols =c(8:5007)]
+yoaA<-yoaA[order(iso3,yob,yoa)]
+##Adding the two hazards in the year of arrival 
+a<-yoa[,8:5007]
+b<-yoaA[,8:5007]
+yoa<-a+b
+rm(a)
+rm(b)
+rm(yoaA)
+#Merging it to the Australian census data information
+yoa$id <- seq.int(nrow(yoa))
+yoa <- merge(Aust5[,1:7], yoa,by=c('id'))
+## remove the hazard values in the rows where yob equals yoa, 
+#because I sorted their hazard values above
+yoa[yob==yoa, (8:5007) :=lapply(.SD, "*", 0), .SDcols =c(8:5007)]
+
+
+##Adding up all of the hazards!!! i.e. yob+yobtoyoa+yoa
+a<-yob[,8:5007]
+b<-yobtoyoa[,8:5007]
+rm(yob)
+rm(yobtoyoa)
+e<-a+b
+rm(a)
+rm(b)
+c<-yoa[,8:5007]
+rm(yoa)
+f<-e+c
+rm(c)
+rm(e)
+
+#Years between year of arrival and census year ...
+# Subtracting the cumulative hazard in the census year from the 
+# cumulative hazard in the year of arrival
+tbhazl<-tbhzAust[,c(1,2,3,5)]
+tbhazl<-dcast(tbhazl, year~replicate)
+# creating data table with cumulative hazard in the year of arrival
+yoacmsm<-merge(Aust5, tbhazl, by.x = c("yoa"), by.y = c("year"), all.x=TRUE, all.y=FALSE)
+yoacmsm<-yoacmsm[order(iso3,yob,yoa)]
+# creating data table with cumulative hazard in the censusyear
+Aust5<-Aust5[, censyear := censusyear]
+censcmsm<-merge(Aust5, tbhazl, by.x = c("censyear"), by.y = c("year"), all.x=TRUE, all.y=FALSE)
+rm(tbhazl)
+censcmsm<-censcmsm[order(iso3,yob,yoa)]
+Aust5[, "censyear":=NULL]
+gc()
+#subtracting one from the other
+a<-censcmsm[,9:5008]
+b<-yoacmsm[,8:5007]
+gc()
+yoatocens<-a-b
+rm(a)
+rm(b)
+rm(censcmsm)
+rm(yoacmsm)
+yoatocens$id <- seq.int(nrow(yoatocens))
+#Merging it to the Australian census data information
+yoatocens <- merge(Aust5[,1:7], yoatocens,by=c('id'))
+
+gc()
+##Adding up all of the hazards!!! i.e. f + yoatocens
+d<-yoatocens[,8:5007]
+rm(yoatocens)
+yobtoyoa<-f+d
+rm(d)
+rm(f)
+#Merging it to the Australian census data information
+yobtoyoa$id <- seq.int(nrow(yobtoyoa))
+yobtoyoa <- merge(Aust5[,1:7], yobtoyoa,by=c('id'))
+
+#Create function to turn the hazards into risks
+haztorisk<-function(v) {
+  1-(exp(-v))
+}
+
+#Apply the above function to every element of the matrix and make it 
+# a dataframe again
+Aust06ex<-copy(yobtoyoa)
+rm(yobtoyoa)
+Aust06ex[ , (8:5007) :=lapply(.SD,haztorisk), .SDcols =c(8:5007)]
+
+#Rename column variables in Austrisk
+Vcolnam <- paste0(c("V"),1:5000)
+colnames(Aust06ex)[8:5007] <- Vcolnam
+
+Austborn06<-Austbornrisk5
+rm(Austbornrisk5)
+
+gc()
+
+
+#Loading the 2011 Australian Census data - pick a year and choose relevant location
+####################################################################
+Aust <- read.csv("H:\\Katie\\PhD\\ABS data\\Australia 2011\\Australia 2011.csv",skip=9,header=T)
+####################################################################
+Aust<-as.data.table(Aust)
+
+#Replace the first two column names to become age and yoa
+colnames(Aust)[1] <- "age"
+colnames(Aust)[2] <- "yoa"
+
+# Function for filling down the blank rows in the age column
+filltheblanks <- function(x, missing=""){
+  rle <- rle(as.character(x))
+  empty <- which(rle$value==missing)
+  rle$values[empty] <- rle$value[empty-1] 
+  inverse.rle(rle)
+}
+Aust$age <- filltheblanks(Aust$age)
+
+
+#Getting rid of rows that aren't needed
+Aust <- Aust[age!="Age in Single Years (AGEP)"]
+Aust <- Aust[age!="AGEP - Age in Single Years"]
+Aust <- Aust[age!="AGEP Age"]
+Aust <- Aust[age!="(c) Commonwealth of Australia 2016", ]
+Aust <- Aust[age!="(c) Commonwealth of Australia 2017", ]
+Aust <- Aust[yoa!="YARP Year of Arrival in Australia", ]
+Aust <- Aust[yoa!="Year of Arrival in Australia (YARP)", ]
+Aust <- Aust[age!="Total", ]
+Aust <- Aust[age!="Data Source: 2006 Census of Population and Housing", ]
+Aust <- Aust[age!="Data Source: 2011 Census of Population and Housing", ]
+Aust <- Aust[age!="INFO", ]
+
+#Getting rid of the characters in age columns and make them all numeric
+Aust$age <- gsub("\\D","",Aust$age)
+Aust$age<-as.numeric(Aust$age)
+
+##Creating a variable with 2006/2011/2016 in it, 
+# so I can minus the age values from it later on
+# to obtain year of birth (yob)
+Aust$yoa<-as.character(Aust$yoa)
+Aust$yoa[Aust$yoa=="Arrived 1 Jan 2011 - 9 August 2011"]<-"2011"
+Aust$yoa2 <-Aust$yoa
+Aust$yoa2 <- gsub("\\D","",Aust$yoa2)
+Aust$yoa2 <-as.numeric(Aust$yoa2)
+censusyear<-max(Aust$yoa2, na.rm=T)
+Aust$yoa2<-NULL
+
+#Sorting year of arrival column
+Aust$yoa<-as.character(Aust$yoa)
+#Make all "Overseas visitor" having arrived in the year prior to the census
+#I think this is only included as a category in 2016
+
+if(censusyear==2006) {
+  Aust$yoa[Aust$yoa=="Overseas visitor"]<-"Arrived 2005"
+} else if (censusyear==2011) {
+  Aust$yoa[Aust$yoa=="Overseas visitor"]<-"Arrived 2010"
+} else if (censusyear==2016) {
+  Aust$yoa[Aust$yoa=="Overseas visitor"]<-"Arrived 2015"
+}
+Aust$yoa <- gsub("\\D","",Aust$yoa)
+Aust$yoa<-as.numeric(Aust$yoa)
+
+#Reshape, of country of birth becomes one column
+Aust<- melt(Aust, id=c("age", "yoa"))
+
+##Renaming country of birth (cob) variable
+names(Aust)[names(Aust)=="variable"] <- "cob"
+names(Aust)[names(Aust)=="value"] <- "pop"
+#unique(Aust$cob)
+Aust <- Aust[Aust$cob!="Total", ]
+Aust$pop<-as.numeric(Aust$pop)
+sum(Aust$pop)
+#2006 19,855,249
+#2016 23,612,655
+
+##Creating a censusdate variable so I can
+# minus the age values from it to obtain year of birth (yob)
+Aust$censusdate<-censusyear
+Aust$yob<-Aust$censusdate-Aust$age
+Aust[, "censusdate":=NULL]
+
+#Changing the FOI for the census year so that it represents 
+# only part of the year to the date of the census
+tbhaz<-copy(tbhazref)
+tbhaz$testari<-tbhaz$FOI*(220/365.2425)
+if(censusyear==2006) {
+  tbhaz$FOI[tbhaz$year==2011]<-tbhaz$testari[tbhaz$year==2011]
+} else if (censusyear==2011) {
+  tbhaz$FOI[tbhaz$year==2011]<-tbhaz$testari[tbhaz$year==2011]
+} else if (censusyear==2016) {
+  tbhaz$FOI[tbhaz$year==2016]<-tbhaz$testari[tbhaz$year==2016]
+}
+tbhaz[, "testari":=NULL]
+
+##Creating a column of iso3 codes 
+Aust$iso3<-countrycode(Aust$cob, "country.name", "iso3c")
+
+##Fixing iso3 codes for those that didn't convert
+Aust[Aust$cob == "At.sea","cob":=NA]
+Aust[Aust$cob == "Not.stated","iso3":= NA]
+Aust[Aust$cob == "Not applicable","iso3":= NA]
+Aust[Aust$cob == "Not.elsewhere.classified","iso3":= NA]
+Aust[Aust$cob == "Overseas.visitor","iso3":=NA]
+Aust[Aust$cob == "Inadequately.described","iso3":=NA]
+Aust[Aust$cob == "China..excludes.SARs.and.Taiwan.Province.","iso3":= "CHN"]
+Aust[Aust$cob == "Japan.and.the.Koreas..nfd","iso3":= "JPN"]
+Aust[Aust$cob == "United.Kingdom..Channel.Islands.and.Isle.of.Man..nfd","iso3":= "GBR"]
+Aust[Aust$cob == "Virgin.Islands..United.States","iso3":= "USA"]
+Aust[Aust$cob == "Americas..nfd","iso3":="USA"]
+Aust[Aust$cob == "British.Antarctic.Territory","iso3":="GBR"]
+Aust[Aust$cob == "Caribbean..nfd","iso3":="BHS"]
+Aust[Aust$cob == "Central.America..nfd","iso3":="CRI"]
+Aust[Aust$cob == "Central.and.West.Africa..nfd","iso3":="CMR"]
+Aust[Aust$cob == "Central.Asia..nfd","iso3":="KAZ"]
+Aust[Aust$cob == "Eastern.Europe..nfd","iso3":="POL"]
+Aust[Aust$cob == "England","iso3":="GBR"]
+Aust[Aust$cob == "Japan.and.the.Koreas..nfd","iso3":="JPN"]
+Aust[Aust$cob == "Kosovo","iso3":="SRB"]
+Aust[Aust$cob == "Mainland.South.East.Asia..nfd","iso3":="THA"]
+Aust[Aust$cob == "Maritime.South.East.Asia..nfd","iso3":="PHL"]
+Aust[Aust$cob == "Melanesia..nfd","iso3":="VUT"]
+Aust[Aust$cob == "Micronesia..nfd","iso3":="KIR"]
+Aust[Aust$cob == "Middle.East..nfd","iso3":="SAU"]
+Aust[Aust$cob == "North.Africa..nfd","iso3":="MAR"]
+Aust[Aust$cob == "North.Africa.and.the.Middle.East..nfd","iso3":="EGY"]
+Aust[Aust$cob == "North.East.Asia..nfd","iso3":="MNG"]
+Aust[Aust$cob == "North.West.Europe..nfd","iso3":="FRA"]
+Aust[Aust$cob == "Northern.America..nfd","iso3":="USA"]
+Aust[Aust$cob == "Northern.Europe..nfd","iso3":="NLD"]
+Aust[Aust$cob == "Polynesia..excludes.Hawaii...nec","iso3":="WSM"]
+Aust[Aust$cob == "Polynesia..excludes.Hawaii...nfd","iso3":="WSM"]
+Aust[Aust$cob == "Scotland South.America..nec","iso3":="GBR"]
+Aust[Aust$cob == "South.America..nfd","iso3":="BRA"]
+Aust[Aust$cob == "South.East.Asia..nfd","iso3":="THA"]
+Aust[Aust$cob == "South.Eastern.Europe..nfd","iso3":="MKD"]
+Aust[Aust$cob == "Southern.and.Central.Asia..nfd","iso3":="AFG"]
+Aust[Aust$cob == "Southern.and.East.Africa..nec","iso3":="SOM"]
+Aust[Aust$cob == "Southern.and.East.Africa..nfd","iso3":="SOM"]
+Aust[Aust$cob == "Southern.and.Eastern.Europe..nfd","iso3":="MKD"]
+Aust[Aust$cob == "Southern.Asia..nfd","iso3":="IND"]
+Aust[Aust$cob == "Southern.Europe..nfd","iso3":="GRC"]
+Aust[Aust$cob == "Spanish.North.Africa","iso3":="ESP"]
+Aust[Aust$cob == "Sub.Saharan.Africa..nfd","iso3":="SOM"]
+Aust[Aust$cob == "United.Kingdom..Channel.Islands.and.Isle.of.Man..nf","iso3":="GBR"]
+Aust[Aust$cob == "Scotland","iso3":="GBR"]
+Aust[Aust$cob == "Wales","iso3":="GBR"]
+Aust[Aust$cob == "Western.Europe..nfd","iso3":="FRA"]
+Aust[Aust$cob == "South.America..nec","iso3":="BRA"]
+Aust[Aust$cob == "China..excludes.SARs.and.Taiwan.","iso3":="CHN"]
+Aust[Aust$cob == "Australia..includes.External.Territories...nfd","iso3":="AUS"] 
+Aust[Aust$cob == "Norfolk.Island","iso3":="AUS"]
+Aust[Aust$cob == "Australian.External.Territories..nec","iso3":="AUS"]
+Aust[Aust$cob == "Channel.Islands","iso3":="GBR"]
+Aust[Aust$cob == "RÃ.union","iso3":="FRA"]
+Aust[Aust$cob == "Oceania.and.Antarctica..nfd","iso3":="NZL"]
+
+#Removing yoa for Norfolk Islanders since I've made their iso3 Australia anyway
+Aust[Aust$cob == "Norfolk.Island","yoa":=NA]
+
+#unique(Aust$cob)
+
+##Removing any rows with no population 
+Aust <- Aust[pop!= 0]
+
+##Comparing ISO3 codes in TBhaz versus census to see what iso3 need to be converted
+# because they aren't included in Houben and Dodd's dataset
+#missinginours<-setdiff(tbhaz$iso3, Aust$iso3)
+#missinginours<-countrycode(missinginours, "iso3c","country.name")
+#missinginours
+
+#missingintheirs<-setdiff(Aust$iso3,tbhaz$iso3)
+#missingintheirs<-countrycode(missingintheirs, "iso3c","country.name")
+#missingintheirs
+
+#rm(missinginours)
+#rm(missingintheirs)
+
+#Converting cob not represented in Dodd's data to others that are
+Aust[Aust$iso3 == "IMN","iso3":= "GBR" ] #Isle of Man
+Aust[Aust$iso3 == "GGY","iso3":= "GBR" ] #Guernsey
+Aust[Aust$iso3 == "JEY","iso3":= "GBR" ] #Jersey
+Aust[Aust$iso3 == "GIB","iso3":= "ESP" ] #Gibraltar
+Aust[Aust$iso3 == "TWN","iso3":= "CHN" ] #Taiwan
+Aust[Aust$iso3 == "SHN","iso3":= "GBR" ] #Saint Helena
+Aust[Aust$iso3 == "FLK","iso3":= "GBR" ] #Falkland Islands (Malvinas)
+Aust[Aust$iso3 == "REU","iso3":= "FRA" ] #Reunion
+Aust[Aust$iso3 == "NFK","iso3":= "AUS" ] #Norfolk Island
+Aust[Aust$iso3 == "ATA","iso3":= "GBR" ] #Antarctica
+
+Aust[Aust$iso3 == "LIE","iso3":= "AUT" ] #Liechtenstein
+Aust[Aust$iso3 == "FRO","iso3":= "NOR" ] #Faroe Islands
+Aust[Aust$iso3 == "VAT","iso3":= "ITA" ] #Holy See (Vatican City State)
+Aust[Aust$iso3 == "ESH","iso3":= "MAR" ] #Western Sahara
+Aust[Aust$iso3 == "SPM","iso3":= "FRA" ] #Saint Pierre and Miquelon
+Aust[Aust$iso3 == "TWN","iso3":= "CHN" ] #Taiwan, Province of China
+Aust[Aust$iso3 == "GLP","iso3":= "FRA" ] #Guadeloupe
+Aust[Aust$iso3 == "GUF","iso3":= "FRA" ] #French Guiana
+Aust[Aust$iso3 == "MTQ","iso3":= "FRA" ] #Martinique
+Aust[Aust$iso3 == "MYT","iso3":= "FRA" ] #Mayotte
+Aust[Aust$iso3 == "SHN","iso3":= "GBR" ] #Saint Helena, Ascension and Tristan da Cunha
+
+
+#aggregate all the rows that have ended being the same
+Aust <- data.table(Aust)
+Aust <- Aust[, list(pop=sum(pop)), 
+             by=c("age", "yoa", "cob", "yob", "iso3")]
+
+
+#########CODE FOR DEVLOPING RECENT INFECTION DATASET################
+#Changing the FOI for 2014, so that represents part of the year only
+#tbhaz$testari<-tbhaz$FOI*(220/365.2425)
+#tbhaz$FOI[tbhaz$year==2014]<-tbhaz$testari[tbhaz$year==2014]
+#tbhaz["testari"]<- NULL
+
+#Changing the FOI for 2015 and 2016 to zero
+#tbhaz$FOI[tbhaz$year==2016]<-0
+#tbhaz$FOI[tbhaz$year==2015]<-0
+
+sum(Aust$pop)
+#total population
+#2006 - 19,855,249
+#2011 - 21,507,670
+#2016 - 
+
+
+
+sum(Aust$pop[is.na(Aust$yoa)&(Aust$iso3!="AUS")& !is.na(Aust$iso3)],na.rm=TRUE)
+#Missing yoa only, not Australian: 
+#2006 - 210,725
+#2011 - 234,766
+#2016 - 
+
+sum(Aust$pop[is.na(Aust$iso3)& !is.na(Aust$yoa)],na.rm=TRUE)
+#Missing iso3 only: 
+#2006 - 9,184
+#2011 - 8318
+#2016 - 
+
+sum(Aust$pop[is.na(Aust$iso3)& is.na(Aust$yoa)],na.rm=TRUE)
+#Missing both yoa and iso3 only: 
+#2006 - 1,367,763
+#2011 - 1,197,204
+#2016 - 
+
+
+##Subsetting all rows with NA in yoa and those born in Ausralia 
+Austborn <- subset(Aust, Aust$iso3=="AUS")
+Austborn$yoa<-NULL
+sum(Austborn$pop)
+#2006 - 14,072,762
+#2011 - 15,021,457
+#2016 - 15,072,762
+#str(Austborn)
+
+
+##Subsetting all rows with NA in yoa, but a country of birth, 
+#and all those with yoa, but not country of birth
+#i.e. they were born overseas but we don't know when 
+#they migrated, or where they migrated from.
+AustNA <- subset(Aust, (is.na(Aust$yoa)& Aust$iso!="AUS")|is.na(Aust$iso3))
+sum(AustNA$pop)
+#2006 - 1,376,947
+#2011 - 1,440,288
+#2016 - 
+
+##Removing all rows with anything missing 
+Aust <- subset(Aust,!is.na(Aust$yoa) & !is.na(Aust$iso3))
+sum(Aust$pop,na.rm=TRUE)
+#2006 - 4,194,815
+#2011 - 5,045,925
+#2016 - 
+
+sum(Austborn$pop,na.rm=TRUE)+sum(Aust$pop,na.rm=TRUE)+sum(AustNA$pop,na.rm=TRUE)
+#2006 - 19,855,249
+#2011 - 21,507,670
+#2016 - 
+
+
+sum(Austborn$pop,na.rm=TRUE)+sum(Aust$pop,na.rm=TRUE)
+#2006 - 18,267,577
+#2011 - 20,067,382
+#2016 - 
+
+rm(AustNA)
+
+#Reorder columns by country (alphabetical), yob (ascending), yoa (ascending) 
+Aust<-Aust[order(Aust$iso3,Aust$yob,Aust$yoa), ]
+Austborn<-Austborn[order(Austborn$yob), ]
+##Creating unique IDs
+Aust$id <- seq.int(nrow(Aust))
+Austborn$id <- seq.int(nrow(Austborn))
+
+
+###THE JUDICIOUS MERGE SOLUTION
+### AUSTRALIAN BORN - 5000 replicate DATASET
+
+##Make them all datatables
+Austborn<-as.data.table(Austborn)
+
+##Order them all properly
+tbhaz<-tbhaz[order(iso3,replicate,year)]
+Austborn<-Austborn[order(yob)]
+
+#subset Australian hazards
+tbhzAust <- tbhaz[tbhaz$iso3=="AUS",]  
+tbhzAust<-as.data.table(tbhzAust)
+
+#Creating the year of birth data table (and dividing the hazards in half)...
+tbhazl<-tbhzAust[,1:4]
+tbhazl<-dcast(tbhazl, year+iso3~replicate)
+yob<-merge(Austborn, tbhazl, by.x = c("yob","iso3"), by.y = c("year","iso3"), all.x=TRUE, all.y=FALSE)
+yob<-data.table(yob)
+yob[ , (7:5006) :=lapply(.SD, "*", 0.5), .SDcols =c(7:5006)]
+yob<-yob[order(iso3,yob)]
+
+#Years between year of birth and census year ...
+# Subtracting the cumulative hazard in the census year from the 
+# cumulative hazard in the year of birth
+tbhazl<-tbhzAust[,c(1,2,3,5)]
+tbhazl<-dcast(tbhazl, year~replicate)
+# creating data table with cumulative hazard in the year of birth
+yobcmsm<-merge(Austborn, tbhazl, by.x = c("yob"), by.y = c("year"), all.x=TRUE, all.y=FALSE)
+yobcmsm<-yobcmsm[order(iso3,yob)]
+# creating data table with cumulative hazard in the censusyear
+Austborn<-Austborn[, censyear := censusyear]
+censcmsm<-merge(Austborn, tbhazl, by.x = c("censyear"), by.y = c("year"), all.x=TRUE, all.y=FALSE)
+censcmsm<-censcmsm[order(iso3,yob)]
+Austborn[, "censyear":=NULL]
+#subtracting one from the other
+a<-censcmsm[,8:5007]
+b<-yobcmsm[,7:5006]
+yobtocens<-a- b
+rm(a)
+rm(b)
+rm(censcmsm)
+rm(yobcmsm)
+
+#Merging it to the Australian census data information
+yobtocens$id <- seq.int(nrow(yobtocens))
+yobtocens <- merge(Austborn[,1:6], yobtocens,by=c('id'))
+
+##Adding up all of the hazards!!! i.e. yob+yobtocens
+a<-yob[,7:5006]
+b<-yobtocens[,7:5006]
+Austbornrisk5<-a+b
+rm(a)
+rm(b)
+#Merging it to the Australian census data information
+Austbornrisk5$id <- seq.int(nrow(Austbornrisk5))
+Austbornrisk5 <- merge(Austborn[,1:6], Austbornrisk5,by=c('id'))
+rm(yob)
+rm(yobtocens)
+rm(tbhazl)
+
+#Create function to turn the hazards into risks
+haztorisk<-function(v) {
+  1-(exp(-v))
+}
+
+#Apply the above function to every element of the datatable
+Austbornrisk5[ , (7:5006) :=lapply(.SD,haztorisk), .SDcols =c(7:5006)]
+
+#Rename column variables in Austrisk
+Vcolnam <- paste0(c("V"),1:5000)
+colnames(Austbornrisk5)[7:5006] <- Vcolnam
+
+
+
+
+####THE REST OF THE WORLD
+####5000 replicate ones
+##Make them all datatables
+Aust<-as.data.table(Aust)
+
+gc()
+##Remove the relevant countries from the dataset 
+newcnty<-c("CHN", "GBR", "IND", "MYS", "PHL", "VNM")
+
+'%!in%' <- function(x,y)!('%in%'(x,y))
+Aust5<-Aust[Aust$iso %in% newcnty,]
+Aust<-Aust[Aust$iso %!in% newcnty,]
+Aust<-Aust[Aust$iso!="AUS",]
+
+#Sort and order them and add id columns
+Aust<-Aust[order(iso3,yob,yoa)]
+Aust$id <- seq.int(nrow(Aust))
+Aust5<-Aust5[order(iso3,yob,yoa)]
+Aust5$id <- seq.int(nrow(Aust5))
+
+#Creating the year of birth data table (and dividing the hazards in half)...
+tbhazl<-tbhaz[,1:4]
+tbhazl<-dcast(tbhazl, year+iso3~replicate)
+yob<-merge(Aust5, tbhazl, by.x = c("yob","iso3"), by.y = c("year","iso3"), all.x=TRUE, all.y=FALSE)
+yob<-data.table(yob)
+yob[ , (8:5007) :=lapply(.SD, "*", 0.5), .SDcols =c(8:5007)]
+yob<-yob[order(iso3,yob,yoa)]
+## half the values again in the rows where yob equals yoa 
+yob[yob==yoa, (8:5007) :=lapply(.SD, "*", 0.5), .SDcols =c(8:5007)]
+##subset those rows
+subyob <- subset(yob, yob==yoa)
+## create a new datatable containing a quarter of the Australia hazard for year of arrival
+tbhazl<-tbhzAust[,c(1,3,4)]
+tbhazl<-dcast(tbhazl, year~replicate)
+yoaA<-merge(Aust5, tbhazl, by.x = c("yoa"), by.y = c("year"), all.x=TRUE, all.y=FALSE)
+yoaA[ , (8:5007) :=lapply(.SD, "*", 0.25), .SDcols =c(8:5007)]
+yoaA<-yoaA[order(iso3,yob,yoa)]
+#subset this data table and add it to the yob datatable I subsetted above
+subyoaA <- subset(yoaA, yob==yoa)
+subyob<-subyob[,8:5007]+subyoaA[,8:5007]
+subyob$id2 <- seq.int(nrow(subyob))
+subyoaA$id2 <- seq.int(nrow(subyoaA))
+#Merging it to the Australian census data information
+subyob <- merge(subyoaA[,c(1:7,5008)], subyob,by=c('id2'))
+subyob[, "id2":=NULL]
+# bind it back onto the original datatable for yob and order
+yob <- yob[yob!=yoa]
+yob<- rbind(yob, subyob)
+yob<-yob[order(iso3,yob,yoa)]
+rm(subyob)
+rm(subyoaA)
+rm(yoaA)
+
+#Years between year of birth and year of arrival ...
+# Subtracting the cumulative hazard in the year of birth from the 
+# cumulative hazard in the year before arrival
+tbhazl<-tbhaz[,c(1,2,3,5)]# extract the cumhaz column (7) from tbhaz
+tbhazl<-dcast(tbhazl, year+iso3~replicate)
+# creating data table with cumulative hazard in the year of birth
+yobcmsm<-merge(Aust5, tbhazl, by.x = c("yob","iso3"), by.y = c("year","iso3"), all.x=TRUE, all.y=FALSE)
+yobcmsm<-yobcmsm[order(iso3,yob,yoa)]
+# creating data table with cumulative hazard in the year before arrival
+Aust5[, yoam1 := yoa-1]
+yoam1cmsm<-merge(Aust5, tbhazl, by.x = c("yoam1","iso3"), by.y = c("year","iso3"), all.x=TRUE, all.y=FALSE)
+yoam1cmsm<-yoam1cmsm[order(iso3,yob,yoa)]
+#subtracting one from the other
+a<-yoam1cmsm[,9:5008]
+b<-yobcmsm[,8:5007]
+yobtoyoa<-a-b
+rm(a)
+rm(b)
+rm(yoam1cmsm)
+rm(yobcmsm)
+Aust5[, "yoam1":=NULL]
+yobtoyoa$id <- seq.int(nrow(yobtoyoa))
+#Merging it to the Australian census data information
+yobtoyoa <- merge(Aust5[,1:7], yobtoyoa,by=c('id'))
+## remove the hazard values in the rows where yob equals yoa, 
+#because I sorted their hazard values above
+yobtoyoa[yob==yoa, (8:5007) :=lapply(.SD, "*", 0), .SDcols =c(8:5007)]
+
+##Year of arrival hazard in the country of birth (and dividing the hazards in half)...
+tbhazl<-tbhaz[,1:4]
+tbhazl<-dcast(tbhazl, year+iso3~replicate)
+yoa<-merge(Aust5, tbhazl, by.x = c("yoa","iso3"), by.y = c("year","iso3"), all.x=TRUE, all.y=FALSE)
+yoa<-data.table(yoa)
+yoa[,(8:5007) :=lapply(.SD, "*", 0.5),.SDcols =c(8:5007)]
+yoa<-yoa[order(iso3,yob,yoa)]
+
+##Year of arrival hazard in Australia (and dividing the hazards in half)...
+tbhazl<-tbhzAust[,c(1,3,4)]
+tbhazl<-dcast(tbhazl, year~replicate)
+yoaA<-merge(Aust5, tbhazl, by.x = c("yoa"), by.y = c("year"), all.x=TRUE, all.y=FALSE)
+yoaA<-data.table(yoaA)
+yoaA[ , (8:5007) :=lapply(.SD, "*", 0.5), .SDcols =c(8:5007)]
+yoaA<-yoaA[order(iso3,yob,yoa)]
+##Adding the two hazards in the year of arrival 
+a<-yoa[,8:5007]
+b<-yoaA[,8:5007]
+yoa<-a+b
+rm(a)
+rm(b)
+rm(yoaA)
+#Merging it to the Australian census data information
+yoa$id <- seq.int(nrow(yoa))
+yoa <- merge(Aust5[,1:7], yoa,by=c('id'))
+## remove the hazard values in the rows where yob equals yoa, 
+#because I sorted their hazard values above
+yoa[yob==yoa, (8:5007) :=lapply(.SD, "*", 0), .SDcols =c(8:5007)]
+
+
+##Adding up all of the hazards!!! i.e. yob+yobtoyoa+yoa
+a<-yob[,8:5007]
+b<-yobtoyoa[,8:5007]
+rm(yob)
+rm(yobtoyoa)
+e<-a+b
+rm(a)
+rm(b)
+c<-yoa[,8:5007]
+rm(yoa)
+f<-e+c
+rm(c)
+rm(e)
+
+#Years between year of arrival and census year ...
+# Subtracting the cumulative hazard in the census year from the 
+# cumulative hazard in the year of arrival
+tbhazl<-tbhzAust[,c(1,2,3,5)]
+tbhazl<-dcast(tbhazl, year~replicate)
+# creating data table with cumulative hazard in the year of arrival
+yoacmsm<-merge(Aust5, tbhazl, by.x = c("yoa"), by.y = c("year"), all.x=TRUE, all.y=FALSE)
+yoacmsm<-yoacmsm[order(iso3,yob,yoa)]
+# creating data table with cumulative hazard in the censusyear
+Aust5<-Aust5[, censyear := censusyear]
+censcmsm<-merge(Aust5, tbhazl, by.x = c("censyear"), by.y = c("year"), all.x=TRUE, all.y=FALSE)
+rm(tbhazl)
+censcmsm<-censcmsm[order(iso3,yob,yoa)]
+Aust5[, "censyear":=NULL]
+gc()
+#subtracting one from the other
+a<-censcmsm[,9:5008]
+b<-yoacmsm[,8:5007]
+gc()
+yoatocens<-a-b
+rm(a)
+rm(b)
+rm(censcmsm)
+rm(yoacmsm)
+yoatocens$id <- seq.int(nrow(yoatocens))
+#Merging it to the Australian census data information
+yoatocens <- merge(Aust5[,1:7], yoatocens,by=c('id'))
+
+gc()
+##Adding up all of the hazards!!! i.e. f + yoatocens
+d<-yoatocens[,8:5007]
+rm(yoatocens)
+yobtoyoa<-f+d
+rm(d)
+rm(f)
+#Merging it to the Australian census data information
+yobtoyoa$id <- seq.int(nrow(yobtoyoa))
+yobtoyoa <- merge(Aust5[,1:7], yobtoyoa,by=c('id'))
+
+#Create function to turn the hazards into risks
+haztorisk<-function(v) {
+  1-(exp(-v))
+}
+
+#Apply the above function to every element of the matrix and make it 
+# a dataframe again
+Aust11ex<-copy(yobtoyoa)
+rm(yobtoyoa)
+Aust11ex[ , (8:5007) :=lapply(.SD,haztorisk), .SDcols =c(8:5007)]
+
+#Rename column variables in Austrisk
+Vcolnam <- paste0(c("V"),1:5000)
+colnames(Aust11ex)[8:5007] <- Vcolnam
+
+Austborn11<-Austbornrisk5
+rm(Austbornrisk5)
+
+gc()
+
+
+
+#Loading the 2016 Australian Census data - pick a year and choose relevant location
+####################################################################
+Aust <- read.csv("H:\\Katie\\PhD\\ABS data\\Australia 2016\\Australia 2016.csv",skip=10,header=T)
+####################################################################
+Aust<-as.data.table(Aust)
+
+#Replace the first two column names to become age and yoa
+colnames(Aust)[1] <- "age"
+colnames(Aust)[2] <- "yoa"
+
+# Function for filling down the blank rows in the age column
+filltheblanks <- function(x, missing=""){
+  rle <- rle(as.character(x))
+  empty <- which(rle$value==missing)
+  rle$values[empty] <- rle$value[empty-1] 
+  inverse.rle(rle)
+}
+Aust$age <- filltheblanks(Aust$age)
+
+
+#Getting rid of rows that aren't needed
+Aust <- Aust[age!="Age in Single Years (AGEP)"]
+Aust <- Aust[age!="AGEP - Age in Single Years"]
+Aust <- Aust[age!="AGEP Age"]
+Aust <- Aust[age!="(c) Commonwealth of Australia 2016", ]
+Aust <- Aust[age!="(c) Commonwealth of Australia 2017", ]
+Aust <- Aust[yoa!="YARP Year of Arrival in Australia", ]
+Aust <- Aust[yoa!="Year of Arrival in Australia (YARP)", ]
+Aust <- Aust[age!="Total", ]
+Aust <- Aust[age!="Data Source: 2006 Census of Population and Housing", ]
+Aust <- Aust[age!="Data Source: 2011 Census of Population and Housing", ]
+Aust <- Aust[age!="INFO", ]
+
+#Getting rid of the characters in age columns and make them all numeric
+Aust$age <- gsub("\\D","",Aust$age)
+Aust$age<-as.numeric(Aust$age)
+
+##Creating a variable with 2006/2011/2016 in it, 
+# so I can minus the age values from it later on
+# to obtain year of birth (yob)
+Aust$yoa<-as.character(Aust$yoa)
+Aust$yoa[Aust$yoa=="Arrived 1 Jan 2011 - 9 August 2011"]<-"2011"
+Aust$yoa2 <-Aust$yoa
+Aust$yoa2 <- gsub("\\D","",Aust$yoa2)
+Aust$yoa2 <-as.numeric(Aust$yoa2)
+censusyear<-max(Aust$yoa2, na.rm=T)
+Aust$yoa2<-NULL
+
+#Sorting year of arrival column
+Aust$yoa<-as.character(Aust$yoa)
+#Make all "Overseas visitor" having arrived in the year prior to the census
+#I think this is only included as a category in 2016
+if(censusyear==2006) {
+  Aust$yoa[Aust$yoa=="Overseas visitor"]<-"Arrived 2005"
+} else if (censusyear==2011) {
+  Aust$yoa[Aust$yoa=="Overseas visitor"]<-"Arrived 2010"
+} else if (censusyear==2016) {
+  Aust$yoa[Aust$yoa=="Overseas visitor"]<-"Arrived 2015"
+}
+Aust$yoa <- gsub("\\D","",Aust$yoa)
+Aust$yoa<-as.numeric(Aust$yoa)
+
+#Reshape, of country of birth becomes one column
+Aust<- melt(Aust, id=c("age", "yoa"))
+
+##Renaming country of birth (cob) variable
+names(Aust)[names(Aust)=="variable"] <- "cob"
+names(Aust)[names(Aust)=="value"] <- "pop"
+#unique(Aust$cob)
+Aust <- Aust[Aust$cob!="Total", ]
+Aust$pop<-as.numeric(Aust$pop)
+sum(Aust$pop)
+#2006 19,855,249
+#2011 21,507,670
+#2016 23,612,655
+
+##Creating a censusdate variable so I can
+# minus the age values from it to obtain year of birth (yob)
+Aust$censusdate<-censusyear
+Aust$yob<-Aust$censusdate-Aust$age
+Aust[, "censusdate":=NULL]
+
+#Changing the FOI for the census year so that it represents 
+# only part of the year to the date of the census
+tbhaz<-copy(tbhazref)
+tbhaz$testari<-tbhaz$FOI*(220/365.2425)
+if(censusyear==2006) {
+  tbhaz$FOI[tbhaz$year==2011]<-tbhaz$testari[tbhaz$year==2011]
+} else if (censusyear==2011) {
+  tbhaz$FOI[tbhaz$year==2011]<-tbhaz$testari[tbhaz$year==2011]
+} else if (censusyear==2016) {
+  tbhaz$FOI[tbhaz$year==2016]<-tbhaz$testari[tbhaz$year==2016]
+}
+tbhaz[, "testari":=NULL]
+
+##Creating a column of iso3 codes 
+Aust$iso3<-countrycode(Aust$cob, "country.name", "iso3c")
+
+##Fixing iso3 codes for those that didn't convert
+Aust[Aust$cob == "At.sea","cob":=NA]
+Aust[Aust$cob == "Not.stated","iso3":= NA]
+Aust[Aust$cob == "Not applicable","iso3":= NA]
+Aust[Aust$cob == "Not.elsewhere.classified","iso3":= NA]
+Aust[Aust$cob == "Overseas.visitor","iso3":=NA]
+Aust[Aust$cob == "Inadequately.described","iso3":=NA]
+Aust[Aust$cob == "China..excludes.SARs.and.Taiwan.Province.","iso3":= "CHN"]
+Aust[Aust$cob == "Japan.and.the.Koreas..nfd","iso3":= "JPN"]
+Aust[Aust$cob == "United.Kingdom..Channel.Islands.and.Isle.of.Man..nfd","iso3":= "GBR"]
+Aust[Aust$cob == "Virgin.Islands..United.States","iso3":= "USA"]
+Aust[Aust$cob == "Americas..nfd","iso3":="USA"]
+Aust[Aust$cob == "British.Antarctic.Territory","iso3":="GBR"]
+Aust[Aust$cob == "Caribbean..nfd","iso3":="BHS"]
+Aust[Aust$cob == "Central.America..nfd","iso3":="CRI"]
+Aust[Aust$cob == "Central.and.West.Africa..nfd","iso3":="CMR"]
+Aust[Aust$cob == "Central.Asia..nfd","iso3":="KAZ"]
+Aust[Aust$cob == "Eastern.Europe..nfd","iso3":="POL"]
+Aust[Aust$cob == "England","iso3":="GBR"]
+Aust[Aust$cob == "Japan.and.the.Koreas..nfd","iso3":="JPN"]
+Aust[Aust$cob == "Kosovo","iso3":="SRB"]
+Aust[Aust$cob == "Mainland.South.East.Asia..nfd","iso3":="THA"]
+Aust[Aust$cob == "Maritime.South.East.Asia..nfd","iso3":="PHL"]
+Aust[Aust$cob == "Melanesia..nfd","iso3":="VUT"]
+Aust[Aust$cob == "Micronesia..nfd","iso3":="KIR"]
+Aust[Aust$cob == "Middle.East..nfd","iso3":="SAU"]
+Aust[Aust$cob == "North.Africa..nfd","iso3":="MAR"]
+Aust[Aust$cob == "North.Africa.and.the.Middle.East..nfd","iso3":="EGY"]
+Aust[Aust$cob == "North.East.Asia..nfd","iso3":="MNG"]
+Aust[Aust$cob == "North.West.Europe..nfd","iso3":="FRA"]
+Aust[Aust$cob == "Northern.America..nfd","iso3":="USA"]
+Aust[Aust$cob == "Northern.Europe..nfd","iso3":="NLD"]
+Aust[Aust$cob == "Polynesia..excludes.Hawaii...nec","iso3":="WSM"]
+Aust[Aust$cob == "Polynesia..excludes.Hawaii...nfd","iso3":="WSM"]
+Aust[Aust$cob == "Scotland South.America..nec","iso3":="GBR"]
+Aust[Aust$cob == "South.America..nfd","iso3":="BRA"]
+Aust[Aust$cob == "South.East.Asia..nfd","iso3":="THA"]
+Aust[Aust$cob == "South.Eastern.Europe..nfd","iso3":="MKD"]
+Aust[Aust$cob == "Southern.and.Central.Asia..nfd","iso3":="AFG"]
+Aust[Aust$cob == "Southern.and.East.Africa..nec","iso3":="SOM"]
+Aust[Aust$cob == "Southern.and.East.Africa..nfd","iso3":="SOM"]
+Aust[Aust$cob == "Southern.and.Eastern.Europe..nfd","iso3":="MKD"]
+Aust[Aust$cob == "Southern.Asia..nfd","iso3":="IND"]
+Aust[Aust$cob == "Southern.Europe..nfd","iso3":="GRC"]
+Aust[Aust$cob == "Spanish.North.Africa","iso3":="ESP"]
+Aust[Aust$cob == "Sub.Saharan.Africa..nfd","iso3":="SOM"]
+Aust[Aust$cob == "United.Kingdom..Channel.Islands.and.Isle.of.Man..nf","iso3":="GBR"]
+Aust[Aust$cob == "Scotland","iso3":="GBR"]
+Aust[Aust$cob == "Wales","iso3":="GBR"]
+Aust[Aust$cob == "Western.Europe..nfd","iso3":="FRA"]
+Aust[Aust$cob == "South.America..nec","iso3":="BRA"]
+Aust[Aust$cob == "China..excludes.SARs.and.Taiwan.","iso3":="CHN"]
+Aust[Aust$cob == "Australia..includes.External.Territories...nfd","iso3":="AUS"] 
+Aust[Aust$cob == "Norfolk.Island","iso3":="AUS"]
+Aust[Aust$cob == "Australian.External.Territories..nec","iso3":="AUS"]
+Aust[Aust$cob == "Channel.Islands","iso3":="GBR"]
+Aust[Aust$cob == "RÃ.union","iso3":="FRA"]
+Aust[Aust$cob == "Oceania.and.Antarctica..nfd","iso3":="NZL"]
+
+#Removing yoa for Norfolk Islanders since I've made their iso3 Australia anyway
+Aust[Aust$cob == "Norfolk.Island","yoa":=NA]
+
+#unique(Aust$cob)
+
+##Removing any rows with no population 
+Aust <- Aust[pop!= 0]
+
+##Comparing ISO3 codes in TBhaz versus census to see what iso3 need to be converted
+# because they aren't included in Houben and Dodd's dataset
+#missinginours<-setdiff(tbhaz$iso3, Aust$iso3)
+#missinginours<-countrycode(missinginours, "iso3c","country.name")
+#missinginours
+
+#missingintheirs<-setdiff(Aust$iso3,tbhaz$iso3)
+#missingintheirs<-countrycode(missingintheirs, "iso3c","country.name")
+#missingintheirs
+
+#rm(missinginours)
+#rm(missingintheirs)
+
+#Converting cob not represented in Dodd's data to others that are
+Aust[Aust$iso3 == "IMN","iso3":= "GBR" ] #Isle of Man
+Aust[Aust$iso3 == "GGY","iso3":= "GBR" ] #Guernsey
+Aust[Aust$iso3 == "JEY","iso3":= "GBR" ] #Jersey
+Aust[Aust$iso3 == "GIB","iso3":= "ESP" ] #Gibraltar
+Aust[Aust$iso3 == "TWN","iso3":= "CHN" ] #Taiwan
+Aust[Aust$iso3 == "SHN","iso3":= "GBR" ] #Saint Helena
+Aust[Aust$iso3 == "FLK","iso3":= "GBR" ] #Falkland Islands (Malvinas)
+Aust[Aust$iso3 == "REU","iso3":= "FRA" ] #Reunion
+Aust[Aust$iso3 == "NFK","iso3":= "AUS" ] #Norfolk Island
+Aust[Aust$iso3 == "ATA","iso3":= "GBR" ] #Antarctica
+
+Aust[Aust$iso3 == "LIE","iso3":= "AUT" ] #Liechtenstein
+Aust[Aust$iso3 == "FRO","iso3":= "NOR" ] #Faroe Islands
+Aust[Aust$iso3 == "VAT","iso3":= "ITA" ] #Holy See (Vatican City State)
+Aust[Aust$iso3 == "ESH","iso3":= "MAR" ] #Western Sahara
+Aust[Aust$iso3 == "SPM","iso3":= "FRA" ] #Saint Pierre and Miquelon
+Aust[Aust$iso3 == "TWN","iso3":= "CHN" ] #Taiwan, Province of China
+Aust[Aust$iso3 == "GLP","iso3":= "FRA" ] #Guadeloupe
+Aust[Aust$iso3 == "GUF","iso3":= "FRA" ] #French Guiana
+Aust[Aust$iso3 == "MTQ","iso3":= "FRA" ] #Martinique
+Aust[Aust$iso3 == "MYT","iso3":= "FRA" ] #Mayotte
+Aust[Aust$iso3 == "SHN","iso3":= "GBR" ] #Saint Helena, Ascension and Tristan da Cunha
+
+
+#aggregate all the rows that hacen ended being the same
+Aust <- data.table(Aust)
+Aust <- Aust[, list(pop=sum(pop)), 
+             by=c("age", "yoa", "cob", "yob", "iso3")]
+
+
+#########CODE FOR DEVLOPING RECENT INFECTION DATASET################
+#Changing the FOI for 2014, so that represents part of the year only
+#tbhaz$testari<-tbhaz$FOI*(220/365.2425)
+#tbhaz$FOI[tbhaz$year==2014]<-tbhaz$testari[tbhaz$year==2014]
+#tbhaz["testari"]<- NULL
+
+#Changing the FOI for 2015 and 2016 to zero
+#tbhaz$FOI[tbhaz$year==2016]<-0
+#tbhaz$FOI[tbhaz$year==2015]<-0
+
+sum(Aust$pop)
+#total population
+#2006 - 19,855,249
+#2011 - 21,507,670
+#2016 - 23,612,655
+
+
+
+sum(Aust$pop[is.na(Aust$yoa)&(Aust$iso3!="AUS")& !is.na(Aust$iso3)],na.rm=TRUE)
+#Missing yoa only, not Australian: 
+#2006 - 210,725
+#2011 - 234,766
+#2016 - 207,978
+
+sum(Aust$pop[is.na(Aust$iso3)& !is.na(Aust$yoa)],na.rm=TRUE)
+#Missing iso3 only: 
+#2006 - 9,184
+#2011 - 8318
+#2016 - 327,069
+
+sum(Aust$pop[is.na(Aust$iso3)& is.na(Aust$yoa)],na.rm=TRUE)
+#Missing both yoa and iso3 only: 
+#2006 - 1,367,763
+#2011 - 1,197,204
+#2016 - 1,624,443
+
+
+##Subsetting all rows with NA in yoa and those born in Ausralia 
+Austborn <- subset(Aust, Aust$iso3=="AUS")
+Austborn$yoa<-NULL
+sum(Austborn$pop)
+#2006 - 14,072,762
+#2011 - 15,021,457
+#2016 - 15,615,550
+#str(Austborn)
+
+
+##Subsetting all rows with NA in yoa, but a country of birth, 
+#and all those with yoa, but not country of birth
+#i.e. they were born overseas but we don't know when 
+#they migrated, or where they migrated from.
+AustNA <- subset(Aust, (is.na(Aust$yoa)& Aust$iso!="AUS")|is.na(Aust$iso3))
+sum(AustNA$pop)
+#2006 - 1,376,947
+#2011 - 1,440,288
+#2016 - 2,159,490
+
+##Removing all rows with anything missing 
+Aust <- subset(Aust,!is.na(Aust$yoa) & !is.na(Aust$iso3))
+sum(Aust$pop,na.rm=TRUE)
+#2006 - 4,194,815
+#2011 - 5,045,925
+#2016 - 5,837,615
+
+sum(Austborn$pop,na.rm=TRUE)+sum(Aust$pop,na.rm=TRUE)+sum(AustNA$pop,na.rm=TRUE)
+#2006 - 19,855,249
+#2011 - 21,507,670
+#2016 - 23,612,655
+
+
+sum(Austborn$pop,na.rm=TRUE)+sum(Aust$pop,na.rm=TRUE)
+#2006 - 18,267,577
+#2011 - 20,067,382
+#2016 - 21,453,165
+
+rm(AustNA)
+
+#Reorder columns by country (alphabetical), yob (ascending), yoa (ascending) 
+Aust<-Aust[order(Aust$iso3,Aust$yob,Aust$yoa), ]
+Austborn<-Austborn[order(Austborn$yob), ]
+##Creating unique IDs
+Aust$id <- seq.int(nrow(Aust))
+Austborn$id <- seq.int(nrow(Austborn))
+
+###THE JUDICIOUS MERGE SOLUTION
+### AUSTRALIAN BORN - 5000 replicate DATASET
+
+##Make them all datatables
+Austborn<-as.data.table(Austborn)
+
+##Order them all properly
+tbhaz<-tbhaz[order(iso3,replicate,year)]
+Austborn<-Austborn[order(yob)]
+
+#subset Australian hazards
+tbhzAust <- tbhaz[tbhaz$iso3=="AUS",]  
+tbhzAust<-as.data.table(tbhzAust)
+
+#Creating the year of birth data table (and dividing the hazards in half)...
+tbhazl<-tbhzAust[,1:4]
+tbhazl<-dcast(tbhazl, year+iso3~replicate)
+yob<-merge(Austborn, tbhazl, by.x = c("yob","iso3"), by.y = c("year","iso3"), all.x=TRUE, all.y=FALSE)
+yob<-data.table(yob)
+yob[ , (7:5006) :=lapply(.SD, "*", 0.5), .SDcols =c(7:5006)]
+yob<-yob[order(iso3,yob)]
+
+#Years between year of birth and census year ...
+# Subtracting the cumulative hazard in the census year from the 
+# cumulative hazard in the year of birth
+tbhazl<-tbhzAust[,c(1,2,3,5)]
+tbhazl<-dcast(tbhazl, year~replicate)
+# creating data table with cumulative hazard in the year of birth
+yobcmsm<-merge(Austborn, tbhazl, by.x = c("yob"), by.y = c("year"), all.x=TRUE, all.y=FALSE)
+yobcmsm<-yobcmsm[order(iso3,yob)]
+# creating data table with cumulative hazard in the censusyear
+Austborn<-Austborn[, censyear := censusyear]
+censcmsm<-merge(Austborn, tbhazl, by.x = c("censyear"), by.y = c("year"), all.x=TRUE, all.y=FALSE)
+censcmsm<-censcmsm[order(iso3,yob)]
+Austborn[, "censyear":=NULL]
+#subtracting one from the other
+a<-censcmsm[,8:5007]
+b<-yobcmsm[,7:5006]
+yobtocens<-a- b
+rm(a)
+rm(b)
+rm(censcmsm)
+rm(yobcmsm)
+
+
+#Merging it to the Australian census data information
+yobtocens$id <- seq.int(nrow(yobtocens))
+yobtocens <- merge(Austborn[,1:6], yobtocens,by=c('id'))
+
+##Adding up all of the hazards!!! i.e. yob+yobtoyoa+yoa+yoatocens
+a<-yob[,7:5006]
+b<-yobtocens[,7:5006]
+Austbornrisk5<-a+b
+rm(a)
+rm(b)
+#Merging it to the Australian census data information
+Austbornrisk5$id <- seq.int(nrow(Austbornrisk5))
+Austbornrisk5 <- merge(Austborn[,1:6], Austbornrisk5,by=c('id'))
+rm(yob)
+rm(yobtocens)
+rm(tbhazl)
+
+#Create function to turn the hazards into risks
+haztorisk<-function(v) {
+  1-(exp(-v))
+}
+
+#Apply the above function to every element of the datatable
+Austbornrisk5[ , (7:5006) :=lapply(.SD,haztorisk), .SDcols =c(7:5006)]
+
+#Rename column variables in Austrisk
+Vcolnam <- paste0(c("V"),1:5000)
+colnames(Austbornrisk5)[7:5006] <- Vcolnam
+
+
+
+
+
+####THE REST OF THE WORLD
+####5000 replicate ones
+##Make them all datatables
+Aust<-as.data.table(Aust)
+
+gc()
+##Remove the relevant countries from the dataset 
+newcnty<-c("CHN", "GBR", "IND", "MYS", "PHL", "VNM")
+
+'%!in%' <- function(x,y)!('%in%'(x,y))
+Aust5<-Aust[Aust$iso %in% newcnty,]
+Aust<-Aust[Aust$iso %!in% newcnty,]
+Aust<-Aust[Aust$iso!="AUS",]
+
+#Sort and order them and add id columns
+Aust<-Aust[order(iso3,yob,yoa)]
+Aust$id <- seq.int(nrow(Aust))
+Aust5<-Aust5[order(iso3,yob,yoa)]
+Aust5$id <- seq.int(nrow(Aust5))
+
+#Creating the year of birth data table (and dividing the hazards in half)...
+tbhazl<-tbhaz[,1:4]
+tbhazl<-dcast(tbhazl, year+iso3~replicate)
+yob<-merge(Aust5, tbhazl, by.x = c("yob","iso3"), by.y = c("year","iso3"), all.x=TRUE, all.y=FALSE)
+yob<-data.table(yob)
+yob[ , (8:5007) :=lapply(.SD, "*", 0.5), .SDcols =c(8:5007)]
+yob<-yob[order(iso3,yob,yoa)]
+## half the values again in the rows where yob equals yoa 
+yob[yob==yoa, (8:5007) :=lapply(.SD, "*", 0.5), .SDcols =c(8:5007)]
+##subset those rows
+subyob <- subset(yob, yob==yoa)
+## create a new datatable containing a quarter of the Australia hazard for year of arrival
+tbhazl<-tbhzAust[,c(1,3,4)]
+tbhazl<-dcast(tbhazl, year~replicate)
+yoaA<-merge(Aust5, tbhazl, by.x = c("yoa"), by.y = c("year"), all.x=TRUE, all.y=FALSE)
+yoaA[ , (8:5007) :=lapply(.SD, "*", 0.25), .SDcols =c(8:5007)]
+yoaA<-yoaA[order(iso3,yob,yoa)]
+#subset this data table and add it to the yob datatable I subsetted above
+subyoaA <- subset(yoaA, yob==yoa)
+subyob<-subyob[,8:5007]+subyoaA[,8:5007]
+subyob$id2 <- seq.int(nrow(subyob))
+subyoaA$id2 <- seq.int(nrow(subyoaA))
+#Merging it to the Australian census data information
+subyob <- merge(subyoaA[,c(1:7,5008)], subyob,by=c('id2'))
+subyob[, "id2":=NULL]
+# bind it back onto the original datatable for yob and order
+yob <- yob[yob!=yoa]
+yob<- rbind(yob, subyob)
+yob<-yob[order(iso3,yob,yoa)]
+rm(subyob)
+rm(subyoaA)
+rm(yoaA)
+gc()
+#Years between year of birth and year of arrival ...
+# Subtracting the cumulative hazard in the year of birth from the 
+# cumulative hazard in the year before arrival
+tbhazl<-tbhaz[,c(1,2,3,5)]# extract the cumhaz column (7) from tbhaz
+tbhazl<-dcast(tbhazl, year+iso3~replicate)
+# creating data table with cumulative hazard in the year of birth
+yobcmsm<-merge(Aust5, tbhazl, by.x = c("yob","iso3"), by.y = c("year","iso3"), all.x=TRUE, all.y=FALSE)
+yobcmsm<-yobcmsm[order(iso3,yob,yoa)]
+# creating data table with cumulative hazard in the year before arrival
+Aust5[, yoam1 := yoa-1]
+yoam1cmsm<-merge(Aust5, tbhazl, by.x = c("yoam1","iso3"), by.y = c("year","iso3"), all.x=TRUE, all.y=FALSE)
+yoam1cmsm<-yoam1cmsm[order(iso3,yob,yoa)]
+#subtracting one from the other
+a<-yoam1cmsm[,9:5008]
+b<-yobcmsm[,8:5007]
+gc()
+yobtoyoa<-a-b
+rm(a)
+rm(b)
+rm(yoam1cmsm)
+rm(yobcmsm)
+Aust5[, "yoam1":=NULL]
+yobtoyoa$id <- seq.int(nrow(yobtoyoa))
+#Merging it to the Australian census data information
+yobtoyoa <- merge(Aust5[,1:7], yobtoyoa,by=c('id'))
+## remove the hazard values in the rows where yob equals yoa, 
+#because I sorted their hazard values above
+yobtoyoa[yob==yoa, (8:5007) :=lapply(.SD, "*", 0), .SDcols =c(8:5007)]
+
+##Year of arrival hazard in the country of birth (and dividing the hazards in half)...
+tbhazl<-tbhaz[,1:4]
+tbhazl<-dcast(tbhazl, year+iso3~replicate)
+yoa<-merge(Aust5, tbhazl, by.x = c("yoa","iso3"), by.y = c("year","iso3"), all.x=TRUE, all.y=FALSE)
+yoa<-data.table(yoa)
+yoa[,(8:5007) :=lapply(.SD, "*", 0.5),.SDcols =c(8:5007)]
+yoa<-yoa[order(iso3,yob,yoa)]
+
+##Year of arrival hazard in Australia (and dividing the hazards in half)...
+tbhazl<-tbhzAust[,c(1,3,4)]
+tbhazl<-dcast(tbhazl, year~replicate)
+yoaA<-merge(Aust5, tbhazl, by.x = c("yoa"), by.y = c("year"), all.x=TRUE, all.y=FALSE)
+yoaA<-data.table(yoaA)
+yoaA[ , (8:5007) :=lapply(.SD, "*", 0.5), .SDcols =c(8:5007)]
+yoaA<-yoaA[order(iso3,yob,yoa)]
+##Adding the two hazards in the year of arrival 
+a<-yoa[,8:5007]
+b<-yoaA[,8:5007]
+rm(yoaA)
+rm(yoa)
+gc()
+yoa<-a+b
+rm(a)
+rm(b)
+#Merging it to the Australian census data information
+yoa$id <- seq.int(nrow(yoa))
+yoa <- merge(Aust5[,1:7], yoa,by=c('id'))
+## remove the hazard values in the rows where yob equals yoa, 
+#because I sorted their hazard values above
+yoa[yob==yoa, (8:5007) :=lapply(.SD, "*", 0), .SDcols =c(8:5007)]
+
+
+##Adding up all of the hazards!!! i.e. yob+yobtoyoa+yoa
+a<-yob[,8:5007]
+b<-yobtoyoa[,8:5007]
+rm(yob)
+rm(yobtoyoa)
+e<-a+b
+rm(a)
+rm(b)
+c<-yoa[,8:5007]
+rm(yoa)
+f<-e+c
+rm(c)
+rm(e)
+
+#Years between year of arrival and census year ...
+# Subtracting the cumulative hazard in the census year from the 
+# cumulative hazard in the year of arrival
+tbhazl<-tbhzAust[,c(1,2,3,5)]
+tbhazl<-dcast(tbhazl, year~replicate)
+# creating data table with cumulative hazard in the year of arrival
+yoacmsm<-merge(Aust5, tbhazl, by.x = c("yoa"), by.y = c("year"), all.x=TRUE, all.y=FALSE)
+yoacmsm<-yoacmsm[order(iso3,yob,yoa)]
+# creating data table with cumulative hazard in the censusyear
+Aust5<-Aust5[, censyear := censusyear]
+censcmsm<-merge(Aust5, tbhazl, by.x = c("censyear"), by.y = c("year"), all.x=TRUE, all.y=FALSE)
+rm(tbhazl)
+censcmsm<-censcmsm[order(iso3,yob,yoa)]
+Aust5[, "censyear":=NULL]
+gc()
+#subtracting one from the other
+a<-censcmsm[,9:5008]
+b<-yoacmsm[,8:5007]
+gc()
+yoatocens<-a-b
+rm(a)
+rm(b)
+rm(censcmsm)
+rm(yoacmsm)
+yoatocens$id <- seq.int(nrow(yoatocens))
+#Merging it to the Australian census data information
+yoatocens <- merge(Aust5[,1:7], yoatocens,by=c('id'))
+
+gc()
+##Adding up all of the hazards!!! i.e. f + yoatocens
+d<-yoatocens[,8:5007]
+rm(yoatocens)
+yobtoyoa<-f+d
+rm(d)
+rm(f)
+#Merging it to the Australian census data information
+yobtoyoa$id <- seq.int(nrow(yobtoyoa))
+yobtoyoa <- merge(Aust5[,1:7], yobtoyoa,by=c('id'))
+
+#Create function to turn the hazards into risks
+haztorisk<-function(v) {
+  1-(exp(-v))
+}
+
+#Apply the above function to every element of the matrix and make it 
+# a dataframe again
+Aust16ex<-copy(yobtoyoa)
+rm(yobtoyoa)
+Aust16ex[ , (8:5007) :=lapply(.SD,haztorisk), .SDcols =c(8:5007)]
+
+#Rename column variables in Austrisk
+Vcolnam <- paste0(c("V"),1:5000)
+colnames(Aust16ex)[8:5007] <- Vcolnam
+
+
+Austborn16<-Austbornrisk5
+rm(Austbornrisk5)
+rm(Aust5)
+
+
