@@ -44,9 +44,12 @@ library(tidyselect)
 
 #Loading the the Australian Census data - choose relevant location
 ####################################################################
-Aust06 <- read.csv("H:\\Katie\\PhD\\ABS data\\Australia 2006\\Australia 2006.csv",skip=9,header=T)
-Aust11 <- read.csv("H:\\Katie\\PhD\\ABS data\\Australia 2011\\Australia 2011.csv",skip=9,header=T)
-Aust16 <- read.csv("H:\\Katie\\PhD\\ABS data\\Australia 2016\\Australia 2016.csv",skip=10,header=T)
+#Aust06 <- read.csv("H:\\Katie\\PhD\\ABS data\\Australia 2006\\Australia 2006.csv",skip=9,header=T)
+#Aust11 <- read.csv("H:\\Katie\\PhD\\ABS data\\Australia 2011\\Australia 2011.csv",skip=9,header=T)
+#Aust16 <- read.csv("H:\\Katie\\PhD\\ABS data\\Australia 2016\\Australia 2016.csv",skip=10,header=T)
+Aust06 <- read.csv('data/Australia 2006.csv',skip=9,header=T)
+Aust11 <- read.csv('data/Australia 2011.csv',skip=9,header=T)
+Aust16 <- read.csv('data/Australia 2016.csv',skip=10,header=T)
 
 Aust<-list(Aust06,Aust11,Aust16)
 rm(Aust06,Aust11,Aust16)
@@ -133,7 +136,7 @@ sumpop
 
 ##Fixing iso3 codes for those that didn't convert, and changing those
 ## that don't appear in Houben and Dodd's dataset
-setwd("H:/Katie/PhD/LTBI to active TB project/R/")
+#setwd("H:/Katie/PhD/LTBI to active TB project/R/")
 source('ISO3 fix functions.R')
 Aust<-lapply(Aust,iso3fixfunc)
 
@@ -275,7 +278,7 @@ rm(AustNA)
 
 #AUSTRALIAN BORN - 5000 replicate DATASET
 #Sourcing the ARTIcalc functions
-setwd("H:/Katie/PhD/LTBI to active TB project/R/")
+#setwd("H:/Katie/PhD/LTBI to active TB project/R/")
 source('ARTIcalc functions.R')
 Austborn <-lapply(Austborn, AustbornTBriskcalc, 5000)
 
@@ -283,7 +286,7 @@ Austborn <-lapply(Austborn, AustbornTBriskcalc, 5000)
 #THE REST OF THE WORLD
 #5000 replicate ones
 #Sourcing the ARTIcalc functions
-setwd("H:/Katie/PhD/LTBI to active TB project/R/")
+#setwd("H:/Katie/PhD/LTBI to active TB project/R/")
 source('ARTIcalc functions.R')
 #### DT needs nine columns: "year","iso3","age","yoa","sex",
 ###"pop", "yob", "mani", "cob"
@@ -316,7 +319,7 @@ TBriskcalc_5K200rep<- function(DT){
   DT200<-DT[DT$iso3%!in% newcnty,]
   ###calculate the risks using 5000 an 200 rep dataset
   #Sourcing the functions
-  setwd("H:/Katie/PhD/LTBI to active TB project/R/")
+  #setwd("H:/Katie/PhD/LTBI to active TB project/R/")
   source('ARTIcalc functions.R')
   ##################################################################################
   ####CHOOSE WHICH ARTI CALC IS NEEDED
