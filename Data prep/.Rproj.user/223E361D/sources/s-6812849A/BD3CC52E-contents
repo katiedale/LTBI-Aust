@@ -1,0 +1,1457 @@
+
+#install.packages("swirl")
+#install.packages("dplyr")
+#install.packages("ggplot2")
+#install.packages ("quantmod")
+#install.packages ("sm")
+#install.packages("countrycode")
+#install.packages("stringr")
+#install.packages("reshape2")
+#install.packages("zoo")
+#install.packages("data.table")
+#install.packages("plyr")
+#install.packages("sp")
+#install.packages("plotrix")
+#install.packages("RColorBrewer")
+#install.packages("rgdal")
+#install.packages("spdplyr")
+#install.packages("geojsonio")
+#install.packages("rmapshaper")
+#install.packages("scales")
+#install.packages("maps")
+#install.packages("rgeos")
+#install.packages("maptools")
+#install.packages("sp")
+#install.packages("Cairo")
+#install.packages("ggmap")
+#install.packages("scales")
+#install.packages("ggrepel")
+#install.packages("installr")
+#install.packages("animation")
+#install.packages("tidyverse")
+#install.packages("viridis")
+#install.packages("maptools")
+#install.packages("devtools")
+library(devtools)
+#install.packages("gganimate")
+#devtools::install_github("dgrtwo/gganimate")
+
+#install.packages("magick")
+#install.packages("colourspace")
+
+library(installr)
+#install.ImageMagick(URL = "http://www.imagemagick.org/script/binary-releases.php")
+
+library(zoo)
+library(plyr)
+library(data.table)
+library(stringr)
+library(quantmod)
+library(dplyr)
+library(sm)
+library(reshape2)
+library(countrycode)
+library(ggplot2)
+library(reshape2)
+library(rgdal)
+library(spdplyr)
+library(viridis)
+library(maptools)
+library(Cairo)
+library(scales)
+library(ggrepel)
+library(animation)
+library(tidyverse)
+library(rmapshaper)
+library(RColorBrewer)
+library(sp)
+library(scales)
+library(maps)
+library(rgeos)
+library(geojsonio)
+library(ggmap)
+library(gganimate)
+library(magick)
+library("colorspace")
+
+
+
+#MIGRATION OVERTIME 
+#YEAR OF ARRIVAL
+
+#set directory to the folder where the shapefile is
+setwd("H:/Katie/PhD/LTBI project/R/")
+
+# Load GCC map shapefile data
+cobyoa <- read.csv("H:/Katie/PhD/LTBI project/R/cobyoa.csv",skip=10,header=T)
+
+
+#DATA SORTING
+# Function for filling down the blank rows in the age column
+filltheblanks <- function(x, missing=""){
+  rle <- rle(as.character(x))
+  empty <- which(rle$value==missing)
+  rle$values[empty] <- rle$value[empty-1] 
+  inverse.rle(rle)
+}
+cobyoa$cob <- filltheblanks(cobyoa$cob)
+
+##Removing irrelevant rows with no entries
+cobyoa <- cobyoa[cobyoa$cob!="Total", ]
+cobyoa <- cobyoa[cobyoa$yoa!="Total", ]
+cobyoa <- cobyoa[cobyoa$cob!="INFO", ]
+cobyoa <- cobyoa[cobyoa$cob!="(c) Commonwealth of Australia 2017", ]
+
+unique(cobyoa$cob)
+
+#Sorting yoa column
+cobyoa$yoa<-replace(cobyoa$yoa, cobyoa$yoa =="Not stated", NA)
+cobyoa$yoa<-replace(cobyoa$yoa, cobyoa$yoa =="Not applicable", NA)
+cobyoa$yoa<-replace(cobyoa$yoa, cobyoa$yoa =="Overseas visitor", NA)
+#Replacing all characters with nothing in yoa column
+cobyoa$yoa <- gsub("\\D","",cobyoa$yoa)
+#Making yoa numeric
+cobyoa$yoa<-as.numeric(cobyoa$yoa)
+
+##Converting country names to ISO3 codes
+cobyoa$cob[cobyoa$cob=="Australia..includes.External.Territories...nfd"]<-"Australia" 
+cobyoa$cobiso3<-countrycode(cobyoa$cob, "country.name", "iso3c")
+
+##Checking that all were converted okay
+cobyoa$cob[is.na(cobyoa$cobiso)]
+cobyoa$cobiso3[cobyoa$cob == "Japan.and.the.Koreas..nfd"] <- "JPN"
+cobyoa$cobiso3[cobyoa$cob == "United.Kingdom..Channel.Islands.and.Isle.of.Man..nfd"] <- "GBR"
+cobyoa$cobiso3[cobyoa$cob == "Virgin.Islands..United.States"] <- "USA"
+cobyoa$cobiso3[cobyoa$cob == "Americas..nfd"]<-"USA"
+cobyoa$cobiso3[cobyoa$cob == "British.Antarctic.Territory"]<-"GBR"
+cobyoa$cobiso3[cobyoa$cob == "Caribbean..nfd"]<-"BHS"
+cobyoa$cobiso3[cobyoa$cob == "Central.America..nfd"]<-"CRI"
+cobyoa$cobiso3[cobyoa$cob == "Central.and.West.Africa..nfd"]<-"CMR"
+cobyoa$cobiso3[cobyoa$cob == "Central.Asia..nfd"]<-"KAZ"
+cobyoa$cobiso3[cobyoa$cob == "Eastern Europe, nfd"]<-"POL"
+cobyoa$cobiso3[cobyoa$cob == "England"]<-"GBR"
+cobyoa$cobiso3[cobyoa$cob == "Japan.and.the.Koreas..nfd"]<-"JPN"
+cobyoa$cobiso3[cobyoa$cob == "Kosovo"]<-"SRB"
+cobyoa$cobiso3[cobyoa$cob == "Mainland.South.East.Asia..nfd"]<-"THA"
+cobyoa$cobiso3[cobyoa$cob == "Maritime.South.East.Asia..nfd"]<-"PHL"
+cobyoa$cobiso3[cobyoa$cob == "Melanesia..nfd"]<-"VUT"
+cobyoa$cobiso3[cobyoa$cob == "Micronesia..nfd"]<-"KIR"
+cobyoa$cobiso3[cobyoa$cob == "Middle.East..nfd"]<-"SAU"
+cobyoa$cobiso3[cobyoa$cob == "North.Africa..nfd"]<-"MAR"
+cobyoa$cobiso3[cobyoa$cob == "North.Africa.and.the.Middle.East..nfd"]<-"EGY"
+cobyoa$cobiso3[cobyoa$cob == "North.East.Asia..nfd"]<-"MNG"
+cobyoa$cobiso3[cobyoa$cob == "North.West.Europe..nfd"]<-"FRA"
+cobyoa$cobiso3[cobyoa$cob == "Northern.America..nfd"]<-"USA"
+cobyoa$cobiso3[cobyoa$cob == "Northern.Europe..nfd"]<-"NLD"
+cobyoa$cobiso3[cobyoa$cob == "Polynesia..excludes.Hawaii...nec"]<-"WSM"
+cobyoa$cobiso3[cobyoa$cob == "Polynesia..excludes.Hawaii...nfd"]<-"WSM"
+cobyoa$cobiso3[cobyoa$cob == "Scotland South.America..nec"]<-"GBR"
+cobyoa$cobiso3[cobyoa$cob == "South.America..nfd"]<-"BRA"
+cobyoa$cobiso3[cobyoa$cob == "South.East.Asia..nfd"]<-"THA"
+cobyoa$cobiso3[cobyoa$cob == "South.Eastern.Europe..nfd"]<-"MKD"
+cobyoa$cobiso3[cobyoa$cob == "Southern.and.Central.Asia..nfd"]<-"AFG"
+cobyoa$cobiso3[cobyoa$cob == "Southern.and.East.Africa..nec"]<-"SOM"
+cobyoa$cobiso3[cobyoa$cob == "Southern.and.East.Africa..nfd"]<-"SOM"
+cobyoa$cobiso3[cobyoa$cob == "Southern.and.Eastern.Europe..nfd"]<-"MKD"
+cobyoa$cobiso3[cobyoa$cob == "Southern.Asia..nfd"]<-"IND"
+cobyoa$cobiso3[cobyoa$cob == "Southern.Europe..nfd"]<-"GRC"
+cobyoa$cobiso3[cobyoa$cob == "Spanish.North.Africa"]<-"ESP"
+cobyoa$cobiso3[cobyoa$cob == "Sub.Saharan.Africa..nfd"]<-"SOM"
+cobyoa$cobiso3[cobyoa$cob == "United.Kingdom..Channel.Islands.and.Isle.of.Man..nf"]<-"GBR"
+cobyoa$cobiso3[cobyoa$cob == "Scotland"]<-"GBR"
+cobyoa$cobiso3[cobyoa$cob == "Wales"]<-"GBR"
+cobyoa$cobiso3[cobyoa$cob == "Western.Europe..nfd"]<-"FRA"
+cobyoa$cobiso3[cobyoa$cob == "South.America..nec"]<-"BRA"
+cobyoa$cobiso3[cobyoa$cob == "Not.stated"]<-NA
+cobyoa$cobiso3[cobyoa$cob == "Overseas.visitor"]<-NA
+cobyoa$cobiso3[cobyoa$cob == "Inadequately.described"]<-NA
+cobyoa$cobiso3[cobyoa$cob == "At.sea"]<-NA
+cobyoa$cobiso3[cobyoa$cob == "China..excludes.SARs.and.Taiwan."]<-"CHN"
+cobyoa$cobiso3[cobyoa$cob == "Southern Asia, nfd"]<-"THA"
+cobyoa$cobiso3[cobyoa$cob == "Southern and Central Asia, nfd"]<-"AFG"
+
+
+cobyoa$cobiso3[cobyoa$cob == "Northern Ireland"]<-"GBR"
+cobyoa$cobiso3[cobyoa$cob == "United Kingdom  Channel Islands and Isle of Man,, nfd"]<-"GBR"
+cobyoa$cobiso3[cobyoa$cob == "Japan and the Koreas,, nfd"] <- "JPN"
+cobyoa$cobiso3[cobyoa$cob == "United Kingdom  Channel Islands and Isle of Man,, nfd"] <- "GBR"
+cobyoa$cobiso3[cobyoa$cob == "Virgin Islands  United States"] <- "USA"
+cobyoa$cobiso3[cobyoa$cob == "Americas,, nfd"]<-"USA"
+cobyoa$cobiso3[cobyoa$cob == "British Antarctic Territory"]<-"GBR"
+cobyoa$cobiso3[cobyoa$cob == "Caribbean, nfd"]<-"BHS"
+cobyoa$cobiso3[cobyoa$cob == "Central America, nfd"]<-"CRI"
+cobyoa$cobiso3[cobyoa$cob == "Central and West Africa, nfd"]<-"CMR"
+cobyoa$cobiso3[cobyoa$cob == "Central Asia, nfd"]<-"KAZ"
+cobyoa$cobiso3[cobyoa$cob == "Eastern Europe, nfd"]<-"POL"
+cobyoa$cobiso3[cobyoa$cob == "England"]<-"GBR"
+cobyoa$cobiso3[cobyoa$cob == "Japan and the Koreas, nfd"]<-"JPN"
+cobyoa$cobiso3[cobyoa$cob == "Kosovo"]<-"SRB"
+cobyoa$cobiso3[cobyoa$cob == "Maritime South-East Asia, nfd"]<-"THA"
+cobyoa$cobiso3[cobyoa$cob == "Mainland South East Asia, nfd"]<-"PHL"
+cobyoa$cobiso3[cobyoa$cob == "Melanesia, nfd"]<-"VUT"
+cobyoa$cobiso3[cobyoa$cob == "Micronesia, nfd"]<-"KIR"
+cobyoa$cobiso3[cobyoa$cob == "Middle East, nfd"]<-"SAU"
+cobyoa$cobiso3[cobyoa$cob == "North Africa, nfd"]<-"MAR"
+cobyoa$cobiso3[cobyoa$cob == "North Africa and the Middle East, nfd"]<-"EGY"
+cobyoa$cobiso3[cobyoa$cob == "North East Asia, nfd"]<-"MNG"
+cobyoa$cobiso3[cobyoa$cob == "North West Europe, nfd"]<-"FRA"
+cobyoa$cobiso3[cobyoa$cob == "Northern America, nfd"]<-"USA"
+cobyoa$cobiso3[cobyoa$cob == "Northern Europe, nfd"]<-"NLD"
+cobyoa$cobiso3[cobyoa$cob == "Polynesia  excludes Hawaii   nec"]<-"WSM"
+cobyoa$cobiso3[cobyoa$cob == "Polynesia  excludes Hawaii, nfd"]<-"WSM"
+cobyoa$cobiso3[cobyoa$cob == "Scotland South America  nec"]<-"GBR"
+cobyoa$cobiso3[cobyoa$cob == "South America, nfd"]<-"BRA"
+cobyoa$cobiso3[cobyoa$cob == "South East Asia, nfd"]<-"THA"
+cobyoa$cobiso3[cobyoa$cob == "South Eastern Europe, nfd"]<-"MKD"
+cobyoa$cobiso3[cobyoa$cob == "Southern and Central Asia, nfd"]<-"AFG"
+cobyoa$cobiso3[cobyoa$cob == "Southern and East Africa,  nec"]<-"SOM"
+cobyoa$cobiso3[cobyoa$cob == "Southern and East Africa, nfd"]<-"SOM"
+cobyoa$cobiso3[cobyoa$cob == "Southern and Eastern Europe, nfd"]<-"MKD"
+cobyoa$cobiso3[cobyoa$cob == "Southern Asia, nfd"]<-"IND"
+cobyoa$cobiso3[cobyoa$cob == "Southern Europe, nfd"]<-"GRC"
+cobyoa$cobiso3[cobyoa$cob == "Spanish North Africa"]<-"ESP"
+cobyoa$cobiso3[cobyoa$cob == "Sub Saharan Africa, nfd"]<-"SOM"
+cobyoa$cobiso3[cobyoa$cob == "United Kingdom  Channel Islands and Isle of Man, nf"]<-"GBR"
+cobyoa$cobiso3[cobyoa$cob == "Scotland"]<-"GBR"
+cobyoa$cobiso3[cobyoa$cob == "Wales"]<-"GBR"
+cobyoa$cobiso3[cobyoa$cob == "Western Europe, nfd"]<-"FRA"
+cobyoa$cobiso3[cobyoa$cob == "South America  nec"]<-"BRA"
+cobyoa$cobiso3[cobyoa$cob == "Not stated"]<-NA
+cobyoa$cobiso3[cobyoa$cob == "Overseas visitor"]<-NA
+cobyoa$cobiso3[cobyoa$cob == "Inadequately described"]<-NA
+cobyoa$cobiso3[cobyoa$cob == "At sea"]<-NA
+cobyoa$cobiso3[cobyoa$cob == "China  excludes SARs and Taiwan"]<-"CHN"
+cobyoa$cobiso3[cobyoa$cob == "Southern Asia, nfd"]<-"THA"
+cobyoa$cobiso3[cobyoa$cob == "Southern and Central Asia, nfd"]<-"AFG"
+cobyoa$cobiso3[cobyoa$cob == "South-East Asia, nfd"]<-"THA"
+cobyoa$cobiso3[cobyoa$cob == "Mainland South-East Asia, nfd"]<-"THA"
+cobyoa$cobiso3[cobyoa$cob == "Southern and East Africa, nec"]<-"SOM"
+cobyoa$cobiso3[cobyoa$cob == "Mainland South-East Asia, nfd"]<-"PHL"
+cobyoa$cobiso3[cobyoa$cob == "Channel Islands"]<-"GBR"
+cobyoa$cobiso3[cobyoa$cob == "R? union"]<-"GBR"
+
+
+cobyoa$cobiso3[cobyoa$cob == "South-East Asia, nfd"]<-"THA"
+
+##Removing any rows with no entries
+cobyoa <- cobyoa[cobyoa$pop != 0, ]
+
+##Converting cob not represented in Dodd's data to others that are
+cobyoa$cobiso3[cobyoa$cobiso3 == "IMN"] <- "GBR" #Isle of Man
+cobyoa$cobiso3[cobyoa$cobiso3 == "GGY"] <- "GBR" #Guernsey
+cobyoa$cobiso3[cobyoa$cobiso3 == "JEY"] <- "GBR" #Jersey
+cobyoa$cobiso3[cobyoa$cobiso3 == "GIB"] <- "ESP" #Gibraltar
+cobyoa$cobiso3[cobyoa$cobiso3 == "TWN"] <- "CHN" #Taiwan
+cobyoa$cobiso3[cobyoa$cobiso3 == "SHN"] <- "GBR" #Saint Helena
+cobyoa$cobiso3[cobyoa$cobiso3 == "FLK"] <- "GBR" #Falkland Islands (Malvinas)
+cobyoa$cobiso3[cobyoa$cobiso3 == "REU"] <- "FRA" #Reunion
+cobyoa$cobiso3[cobyoa$cobiso3 == "ATA"] <- "GBR" #Antarctica
+
+# Remember Norfolk Island!
+cobyoa$cobiso3[cobyoa$cobiso3 == "NFK"] <- "AUS" #Norfolk Island
+
+colnames(cobyoa)[4] <- "iso3"
+
+
+#Formatting country titles
+cobyoa$cob[cobyoa$iso3 == "GBR"]<-"Great Britain"
+cobyoa$cob[cobyoa$iso3 == "CHN"]<-"China"
+cobyoa$cob[cobyoa$iso3 == "PHL"]<-"Philippines"
+cobyoa$cob[cobyoa$iso3 == "ZAF"]<-"South Africa"
+cobyoa$cob[cobyoa$iso3 == "NZL"]<-"New Zealand"
+cobyoa$cob[cobyoa$iso3 == "SDN"]<-"Sudan"
+cobyoa$cob[cobyoa$iso3 == "IND"]<-"India"
+cobyoa$cob[cobyoa$iso3 == "ZAF"]<-"South Africa"
+cobyoa$cob[cobyoa$iso3 == "MYS"]<-"Malaysia"
+cobyoa$cob[cobyoa$iso3 == "SOM"]<-"Philippines"
+cobyoa$cob[cobyoa$iso3 == "SOM"]<-"Vietnam"
+cobyoa$cob[cobyoa$iso3 == "SOM"]<-"Italy"
+cobyoa$cob[cobyoa$iso3 == "RUS"]<-"Russian Federation"
+cobyoa$cob[cobyoa$iso3 == "COD"]<-"Democratic Republic of Congo"
+cobyoa$cob[cobyoa$iso3 == "THA"]<-"Thailand"
+cobyoa$cob[cobyoa$iso3 == "PNG"]<-"Papua New Guinea"
+cobyoa$cob[cobyoa$iso3 == "THA"]<-"Thailand"
+cobyoa$cob[cobyoa$iso3 == "HKG"]<-"Hong Kong"
+cobyoa$cob[cobyoa$iso3 == "AFG"]<-"Afghanistan"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#ANALYSIS
+
+
+
+
+
+
+#Population summary
+popsum<-sum(cobyoa$pop[cobyoa$cob!="Overseas visitor" & cobyoa$cob!="Not stated"], na.rm=TRUE)
+popsum
+#21,776,744
+
+options(scipen=999) #To disable sicentific notation on the axis
+
+
+#Which countries did most overseas-born residents come from?
+pop16<-cobyoa[,c(1,3)]
+pop16<-pop16[pop16$cob!="Overseas visitor" & pop16$cob!="Not stated",]
+
+pop16<-pop16 %>%
+  group_by(cob) %>% # aggregating by iso3 
+  summarise_all(funs(sum))
+pop16$pcnt<-(pop16$pop/popsum)*100
+
+#From 2012-2016 Which countries did most overseas-born residents come from?
+
+
+
+pop16r<-cobyoa[,c(1:3)]
+pop16r<-pop16r[pop16r$cob!="Overseas visitor" & pop16r$cob!="Not stated",]
+pop16r<-pop16r[pop16r$yoa>2011,]
+pop16r$yoa<-NULL
+pop16r$pop<-as.numeric(pop16r$pop)
+pop16r<-pop16r %>%
+  group_by(cob) %>% # aggregating by iso3 
+  summarise_all(funs(sum))
+pop16r <- subset(pop16r,!is.na(pop16r["pop"]))
+popsumr<-sum(pop16r$pop)
+pop16r$pcnt<-(pop16r$pop/popsumr)*100
+
+
+
+
+
+
+#Showing migration overtime
+
+#Area chart - need to sum populations up by year of arrival
+pop16I<-cobyoa[cobyoa$iso3=="BGD"|cobyoa$iso3=="LKA"|cobyoa$iso3=="NPL"|cobyoa$iso3=="AFG"|cobyoa$iso3=="PAK"|cobyoa$iso3=="IDN"|cobyoa$iso3=="SDN"|cobyoa$iso3=="MMR"|cobyoa$iso3=="THA"|cobyoa$iso3=="ZAF"|cobyoa$iso3=="PHL"|cobyoa$iso3=="MYS"|cobyoa$iso3=="VNM"|cobyoa$iso3=="CHN"|cobyoa$iso3=="ITA"|cobyoa$iso3=="IND",]
+pop16I <- subset(pop16I,!is.na(pop16I$yoa))
+pop16I<-pop16I %>%
+  group_by(cob,iso3,yoa) %>% # aggregating by iso3 
+  summarise_all(funs(sum))
+
+#Panelled area chart animation - countries with high levels of migration
+miglist<-c("BGD","CHN","ETH","IND","IDN","GRC","GBR","NZL","RUS",
+           "MMR","PAK","PHL","RUS", "ZAF","THA","VNM","LKA",
+           "HKG",
+           "KHM","PNG","KHM","PHL","NPL","AFG","SDN","ITA")
+mig<-cobyoa[cobyoa$iso3 %in% miglist,]
+mig<-mig[,1:3]
+#removing NA values and aggregating by cob
+mig <- subset(mig,!is.na(mig$yoa))
+mig<-mig %>%
+  group_by(cob,yoa) %>% # aggregating by iso3 
+  summarise_all(funs(sum))
+unique(mig$cob)
+mig$cob <- factor(mig$cob, 
+                  levels = c("Greece","Italy","Vietnam","Cambodia",
+                             "Philippines","Thailand","Hong Kong","China",
+                             "India",
+                             "Indonesia","Great Britain","New Zealand",
+                             "Russian Federation",
+                             "South Africa","Sri Lanka",
+                             "Sudan","Ethiopia","Bangladesh",
+                             "Pakistan","Afghanistan","Myanmar",
+                             "Papua New Guinea","Nepal"))
+dev.off()
+ggplot(mig, aes(x = yoa, y = pop, fill = cob, frame=yoa, cumulative=TRUE))+
+  labs(x = "Year of arrival", y = "Population", fill="Country of birth") +
+  #creates an area chart
+  geom_area(position = 'identity') +
+  #makes mulitple horizontal planels based on iso3 variable
+  #facet_grid(cob ~ .)+
+  scale_y_continuous(breaks = seq(0, 60000, 10000), limits = c(0, 60000))+
+  scale_x_continuous(breaks = seq(1940, 2016, 20), limits = c(1940, 2016))+
+  #geom_text(aes(label=cob, x = Inf, y = Inf, hjust = 3, vjust = 1.55)) +
+  #turn off legend
+  scale_fill_discrete(guide=FALSE)+
+  #to eliminate background, gridlines, and chart border
+  theme(
+    plot.background = element_blank()
+    ,panel.grid.major = element_blank()
+    ,panel.grid.minor = element_blank()
+    ,strip.background = element_blank()
+    ,panel.background = element_rect(fill = NA, color = "white")
+    ,panel.border = element_rect(colour = "black",fill=NA)
+    ,strip.text.y = element_text(size = 8, angle = 360),element_blank())+
+  #to draw x and y axis line
+  theme(axis.line = element_line(color = 'black'))
+
+
+Sys.setenv(PATH = paste("C:/ImageMagick", Sys.getenv("PATH"), sep = ";"))
+gganimate(p, interval = 0.4)
+
+gganimate_save(p, filename = NULL, saver = NULL, fps = 1, loop = 0, ...)
+
+
+#Stacked area chart - countries with high incidence of TB
+
+#top highburden countries as per WHO GLobal TB Report 2017
+#20 by absolute number
+highTBlist<-c("BWA", "CMR", "TCD", "GHA", "GNB","MWI","SWZ","UGA","AGO",
+              "CHN","COD","ETH","IND","IDN","KEN","MOZ","MMR","NGA",
+              "PNG","ZAF","THA","ZWE","BRA","CAF","COG","LSO","LBR",
+              "NAM","TZA","ZMB","KHM","SLE","BGD","KOR","PAK","PHL",
+              "RUS","AZE","VNM","BLR","KAZ","KGZ","PER","MDA","SOM",
+              "TJK","UKR","UZB")
+
+#highTBcoblist<- c("Botswana", "Cameroon", "Chad", "Ghana", "Guinea-Bissau","Malawi", 
+#    "Swaziland", "Uganda", "Angola", "China", "DR Congo", "Ethiopia", 
+#    "India", "Indonesia", "Kenya", "Mozambique", "Myanmar", "Nigeria", 
+#    "Papua New Guinea", "South Africa", "Thailand", "Zimbabwe",
+#    "Brazil", "Central African Republica", "Congo", "Lesotho", 
+#    "Liberia", "Namibia", "UR Tanzania", "Zambia", "Cambodia", 
+#    "Sierra Leone", "Bangladesh", "DPR Korea", "Pakistan", "Philippines", 
+#    "Russian Federation", "Azerbaijan", "Viet Nam", "Belarus", 
+#    "Kazakhstan", "Kyrgyzstan", "Peru", "Republic of Moldova", 
+#    "Somalia", "Tajikistan", "Ukraine", "Uzbekistan")
+
+highTB<-cobyoa[cobyoa$iso3 %in% highTBlist,]
+highTB<-highTB[,1:3]
+sum(highTB$pop)
+#2103073
+#removing NA values and aggregating by cob
+highTB <- subset(highTB,!is.na(highTB$yoa))
+highTB<-highTB %>%
+  group_by(cob,yoa) %>% # aggregating by iso3 
+  summarise_all(funs(sum))
+
+#get rid of ones with less that 10,000
+highTBcheck<-highTB[,c(1,3)]
+highTBcheck<-highTBcheck %>%
+  group_by(cob) %>% # aggregating by iso3 
+  summarise_all(funs(sum))
+highTBcheck$pop<-as.numeric(highTBcheck$pop)
+
+keep<-highTBcheck[highTBcheck["pop"]>10000,]
+keep<-unique(keep$cob)
+highTB<-highTB[highTB$cob %in% keep,]
+
+#I need 19 fill colours
+colcount<-length(unique(highTB$cob))
+#19
+getPalette<-colorRampPalette(brewer.pal(9, "Greys"))
+
+#Labels
+cob<-c("China","India","Philippines","Vietnam")
+yoa<-c(2014,2012,2012.5,1971)
+pop<-c(93000,53000,23500,13000)
+cnames<-data.frame(cob,yoa,pop)
+
+cob<-c("Vietnam")
+yoa<-c(1971,1980)
+pop<-c(10000,5000)
+cline<-data.frame(cob,yoa,pop)
+
+
+
+
+#In 50 shades of grey!
+#Plot
+dev.off()
+
+ggplot(highTB, aes(x = yoa, y = pop, fill = cob ))+
+  geom_area(position = 'stack', colour="black") +
+  labs(x = "Year of arrival", y = "Population", fill="Country of birth") +
+  scale_y_continuous(breaks = seq(0, 200000, 20000))+
+  scale_x_continuous(breaks = seq(1920,2016, 10), limits = c(1920, 2016))+
+  scale_fill_manual(values = getPalette(colcount))+
+  guides(fill=guide_legend(nrow=19))+
+  #to turn the background white
+  theme_bw() +
+  #to eliminate background, gridlines, and chart border
+  theme(
+    legend.position = c(0.30, 0.6),
+    legend.text=element_text(size=20),
+    plot.background = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank())+  
+  geom_text(data=cnames, aes(x = yoa, y = pop,label = cob), fontface="bold",
+            size=6.5)+
+  geom_line(data=cline, aes(x = yoa, y = pop),size=1, colour="grey51")+
+  #to draw x and y axis line
+  theme(axis.line = element_line(color = 'black'))+
+  theme(text = element_text(size=30))
+
+#In colour! with the countries ordered alphabetically (my favourite)
+#I need 17 fill colours
+colcount<-length(unique(highTB$cob))
+#17
+getPalette<-colorRampPalette(brewer.pal(12, "Spectral"))
+
+ggplot(highTB, aes(x = yoa, y = pop, fill = cob ))+
+  geom_area(position = 'stack', colour="black") +
+  labs(x = "Year of arrival", y = "Population", fill="Country of birth") +
+  scale_y_continuous(breaks = seq(0, 200000, 20000))+
+  scale_x_continuous(breaks = seq(1920,2016, 10), limits = c(1920, 2016))+
+  scale_fill_manual(values = getPalette(colcount))+
+  guides(fill=guide_legend(nrow=19))+
+  #to turn the background white
+  theme_bw() +
+  #to eliminate background, gridlines, and chart border
+  theme(
+    legend.position = c(0.30, 0.6),
+    legend.text=element_text(size=20),
+    plot.background = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank())+  
+  geom_text(data=cnames, aes(x = yoa, y = pop,label = cob), fontface="bold",
+           size=6.5)+
+  geom_line(data=cline, aes(x = yoa, y = pop),size=1)+
+  #to draw x and y axis line
+  theme(axis.line = element_line(color = 'black'))+
+  theme(text = element_text(size=30))
+
+
+
+#Ordering cob variable by the pop
+commoncob<-highTB %>%
+  group_by(cob) %>% # aggregating by cob 
+  summarise_all(funs(sum))
+
+commoncob<-commoncob[order(commoncob$pop), ]
+coborder<-commoncob$cob
+coborder<-rev(coborder)
+highTB$cob <- factor(highTB$cob, levels = coborder)
+
+
+#In colour! 
+#I need 17 fill colours
+colcount<-length(unique(highTB$cob))
+#17
+getPalette<-colorRampPalette(brewer.pal(12, "Spectral"))
+
+ggplot(highTB, aes(x = yoa, y = pop, fill = cob ))+
+  geom_area(position = 'stack', colour="black") +
+  labs(x = "Year of arrival", y = "Population", fill="Country of birth") +
+  scale_y_continuous(breaks = seq(0, 200000, 20000))+
+  scale_x_continuous(breaks = seq(1920,2016, 10), limits = c(1920, 2016))+
+  scale_fill_manual(values = rev(getPalette(colcount)))+
+  guides(fill=guide_legend(nrow=19))+
+  #to turn the background white
+  theme_bw() +
+  #to eliminate background, gridlines, and chart border
+  theme(
+    legend.position = c(0.30, 0.6),
+    legend.text=element_text(size=20),
+    plot.background = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank())+  
+  #geom_text(data=cnames, aes(x = yoa, y = pop,label = cob), fontface="bold",
+  #         size=6.5)+
+  #geom_line(data=cline, aes(x = yoa, y = pop),size=1)+
+  #to draw x and y axis line
+  theme(axis.line = element_line(color = 'black'))+
+  theme(text = element_text(size=30))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+geom_text(aes(label="China", x = Inf, y = Inf, 
+              hjust = 10, vjust = 28,fontface="bold"))+
+  geom_text(aes(label="India", x = Inf, y = Inf, 
+                hjust = 10, vjust = 28,fontface="bold")) +
+  geom_text(aes(label="Vietnam", x = Inf, y = Inf, 
+                hjust = 20, vjust = 28,fontface="bold")) +
+  geom_text(aes(label="Philippines", x = Inf, y = Inf, 
+                hjust = 30, vjust = 28,fontface="bold")) +
+
+dev.copy(png,'myplota.jpg')
+dev.off()
+
+
+miglist<-c("ITA",
+           "GRC",
+           "GBR",
+           "NZL",
+           "VNM",
+           "BGD",
+           "CHN",
+           "ETH",
+           "IND",
+           "MYS",
+           "IDN",
+           "RUS",
+           "MMR",
+           "PAK",
+           "PHL",
+           "RUS", 
+           "ZAF",
+           "THA",
+           "LKA",
+           "HKG",
+           "KHM",
+           "PNG",
+           "KHM",
+           "PHL",
+           "NPL",
+           "AFG",
+           "SDN")
+
+mig<-cobyoa[cobyoa$iso3 %in% miglist,]
+mig<-mig[,1:3]
+#removing NA values and aggregating by cob
+mig <- subset(mig,!is.na(mig$yoa))
+mig<-mig %>%
+  group_by(cob,yoa) %>% # aggregating by iso3 
+  summarise_all(funs(sum))
+
+#Ordering the countries correctly
+mig$cob <- factor(mig$cob, 
+                  levels = c("Italy","Greece", "Great Britain", 
+                             "New Zealand","Vietnam","Cambodia",
+                             "Philippines","Thailand","Hong Kong","China",
+                             "India","Malaysia",
+                             "Indonesia",
+                             "Russian Federation",
+                             "South Africa","Sri Lanka",
+                             "Sudan","Ethiopia","Bangladesh",
+                             "Pakistan","Afghanistan","Myanmar",
+                             "Papua New Guinea","Nepal"))
+
+
+cnames <- aggregate(cbind(yoa) ~ cob , data=mig,   
+                    FUN=function(x) median(x)+20)
+cnames$pop<-1834
+##pretty good, I could fix up a couple of things
+cnames$yoa[cnames$cob=="Greece"]<-1964
+cnames$yoa[cnames$cob=="Afghanistan"]<-2005
+cnames$yoa[cnames$cob=="Afghanistan"]<-2005
+cnames$yoa[cnames$cob=="Italy"]<-1960
+
+cnames$yoa[cnames$cob=="Indonesia"]<-2007
+cnames$yoa[cnames$cob=="Nepal"]<-2012
+cnames$pop[cnames$cob=="Nepal"]<-1500
+cnames$yoa[cnames$cob=="Pakistan"]<- 2007
+
+cnames$yoa[cnames$cob=="Hong Kong"]<-1992
+
+cnames$yoa[cnames$cob=="Italy"]<-1957
+cnames$pop[cnames$cob=="Vietnam"]<-5000
+cnames$yoa[cnames$cob=="Vietnam"]<-1981
+cnames$pop[cnames$cob=="Great Britain"]<-10500
+cnames$yoa[cnames$cob=="Great Britain"]<-1967
+cnames$pop[cnames$cob=="Philippines"]<-9000
+cnames$yoa[cnames$cob=="Philippines"]<-2011
+
+cnames$yoa[cnames$cob=="New Zealand"]<-2000
+cnames$pop[cnames$cob=="New Zealand"]<-7000
+cnames$pop[cnames$cob=="Cambodia"]<-100
+cnames$yoa[cnames$cob=="Cambodia"]<-1985
+cnames$pop[cnames$cob=="Italy"]<-4500
+cnames$pop[cnames$cob=="Greece"]<-3000
+cnames$pop[cnames$cob=="Great Britain"]<-9500
+cnames$yoa[cnames$cob=="India"]<-2010
+cnames$pop[cnames$cob=="India"]<-15000
+
+cnames$yoa[cnames$cob=="South Africa"]<-2002
+cnames$pop[cnames$cob=="South Africa"]<-4000
+
+cnames$yoa[cnames$cob=="Sri Lanka"]<-1991
+cnames$pop[cnames$cob=="Sri Lanka"]<-1100
+
+cnames$yoa[cnames$cob=="Malaysia"]<-2011
+cnames$pop[cnames$cob=="Malaysia"]<-1500
+
+cnames$yoa[cnames$cob=="Thailand"]<-2005
+cnames$pop[cnames$cob=="Thailand"]<-2000
+
+cnames$yoa[cnames$cob=="Hong Kong"]<-1985
+cnames$pop[cnames$cob=="Hong Kong"]<-1100
+
+cnames$yoa[cnames$cob=="Sudan"]<-2004
+cnames$pop[cnames$cob=="Sudan"]<-1500
+
+cnames$yoa[cnames$cob=="China"]<-2014
+cnames$pop[cnames$cob=="China"]<-40000
+cnames$yoa[cnames$cob=="Indonesia"]<-2002
+cnames$pop[cnames$cob=="Indonesia"]<-1100
+
+cnames$yoa[cnames$cob=="Ethiopia"]<-2010
+cnames$pop[cnames$cob=="Ethiopia"]<-0
+
+cnames$yoa[cnames$cob=="Bangladesh"]<-2012
+cnames$pop[cnames$cob=="Bangladesh"]<-1000
+
+cnames$yoa[cnames$cob=="Pakistan"]<-2011
+cnames$pop[cnames$cob=="Pakistan"]<-2000
+
+cnames$yoa[cnames$cob=="Afghanistan"]<-2012
+cnames$pop[cnames$cob=="Afghanistan"]<-2000
+
+cnames$yoa[cnames$cob=="Myanmar"]<-2012
+cnames$pop[cnames$cob=="Myanmar"]<-1000
+
+cnames$pop[cnames$cob=="Papua New Guinea"]<-1400
+
+
+
+
+colnames(cnames)[2] <- "yoa2"
+colnames(cnames)[3] <- "pop2"
+mig<-merge(mig, cnames, by.x = c("cob"), by.y = c("cob"), all.x=TRUE, all.y=FALSE)
+
+Italy<-mig[mig$cob=="Italy",]
+Greece<- mig[mig$cob=="Greece"|mig$cob=="Italy",]
+GBR<-mig[mig$cob=="Greece"|mig$cob=="Italy"|mig$cob=="Great Britain",]
+NZL<-mig[mig$cob=="Greece"|mig$cob=="Italy"|mig$cob=="Great Britain"|mig$cob=="New Zealand",]
+Vietnam<-mig[mig$cob=="Greece"|mig$cob=="Italy"|mig$cob=="Great Britain"|mig$cob=="New Zealand"|
+             mig$cob=="Vietnam",]
+Cambodia<-mig[mig$cob=="Greece"|mig$cob=="Italy"|mig$cob=="Great Britain"|mig$cob=="New Zealand"|
+              mig$cob=="Vietnam"|mig$cob=="Cambodia",]
+PHL<-mig[mig$cob=="Greece"|mig$cob=="Italy"|mig$cob=="Great Britain"|mig$cob=="New Zealand"|
+                   mig$cob=="Vietnam"|mig$cob=="Cambodia"|mig$cob=="Philippines",]
+Malaysia<-mig[mig$cob=="Greece"|mig$cob=="Italy"|mig$cob=="Great Britain"|mig$cob=="New Zealand"|
+           mig$cob=="Vietnam"|mig$cob=="Cambodia"|mig$cob=="Philippines"|mig$cob=="Malaysia",]
+
+Thailand<-mig[mig$cob=="Greece"|mig$cob=="Italy"|mig$cob=="Great Britain"|mig$cob=="New Zealand"|
+                mig$cob=="Vietnam"|mig$cob=="Cambodia"|mig$cob=="Philippines"|mig$cob=="Malaysia"
+              |mig$cob=="Thailand",]
+HongKong<-mig[mig$cob=="Greece"|mig$cob=="Italy"|mig$cob=="Great Britain"|mig$cob=="New Zealand"|
+                mig$cob=="Vietnam"|mig$cob=="Cambodia"|mig$cob=="Philippines"|mig$cob=="Malaysia"|mig$cob=="Thailand"|
+                mig$cob=="Hong Kong",]
+Indonesia<-mig[mig$cob=="Greece"|mig$cob=="Italy"|mig$cob=="Great Britain"|mig$cob=="New Zealand"|
+                 mig$cob=="Vietnam"|mig$cob=="Cambodia"|mig$cob=="Philippines"|mig$cob=="Malaysia"|mig$cob=="Thailand"|
+                 mig$cob=="Hong Kong"| 
+                 mig$cob=="Indonesia",]
+SouthAfrica<-mig[mig$cob=="Greece"|mig$cob=="Italy"|mig$cob=="Great Britain"|mig$cob=="New Zealand"|
+                   mig$cob=="Vietnam"|mig$cob=="Cambodia"|mig$cob=="Philippines"|mig$cob=="Malaysia"|mig$cob=="Thailand"|
+                   mig$cob=="Hong Kong"| 
+                   mig$cob=="Indonesia"| mig$cob=="South Africa",]
+SriLanka<-mig[mig$cob=="Greece"|mig$cob=="Italy"|mig$cob=="Great Britain"|mig$cob=="New Zealand"|
+                mig$cob=="Vietnam"|mig$cob=="Cambodia"|mig$cob=="Philippines"|mig$cob=="Malaysia"|mig$cob=="Thailand"|
+                mig$cob=="Hong Kong"|
+                mig$cob=="Indonesia"| mig$cob=="South Africa"|mig$cob=="Sri Lanka",]
+Sudan<-mig[mig$cob=="Greece"|mig$cob=="Italy"|mig$cob=="Great Britain"|mig$cob=="New Zealand"|
+            mig$cob=="Vietnam"|mig$cob=="Cambodia"|mig$cob=="Philippines"|mig$cob=="Malaysia"|mig$cob=="Thailand"|
+            mig$cob=="Hong Kong"| 
+            mig$cob=="Indonesia"| mig$cob=="South Africa"|mig$cob=="Sri Lanka"|
+            mig$cob=="Sudan",]
+Ethiopia<-mig[mig$cob=="Greece"|mig$cob=="Italy"|mig$cob=="Great Britain"|mig$cob=="New Zealand"|
+                mig$cob=="Vietnam"|mig$cob=="Cambodia"|mig$cob=="Philippines"|mig$cob=="Malaysia"|mig$cob=="Thailand"|
+                mig$cob=="Hong Kong"| mig$cob=="Sudan"|
+                mig$cob=="Indonesia"| mig$cob=="South Africa"|mig$cob=="Sri Lanka"|
+                mig$cob=="Sudan"|mig$cob=="Ethiopia",]
+Bangladesh<-mig[mig$cob=="Greece"|mig$cob=="Italy"|mig$cob=="Great Britain"|mig$cob=="New Zealand"|
+                  mig$cob=="Vietnam"|mig$cob=="Cambodia"|mig$cob=="Philippines"|mig$cob=="Malaysia"|mig$cob=="Thailand"|
+                  mig$cob=="Hong Kong"| mig$cob=="Sudan"|
+                  mig$cob=="Indonesia"| mig$cob=="South Africa"|mig$cob=="Sri Lanka"|
+                  mig$cob=="Sudan"|mig$cob=="Ethiopia"| mig$cob=="Bangladesh",]
+Pakistan<-mig[mig$cob=="Greece"|mig$cob=="Italy"|mig$cob=="Great Britain"|mig$cob=="New Zealand"|
+                mig$cob=="Vietnam"|mig$cob=="Cambodia"|mig$cob=="Philippines"|mig$cob=="Malaysia"|mig$cob=="Thailand"|
+                mig$cob=="Hong Kong"| mig$cob=="Sudan"|
+                mig$cob=="Indonesia"| mig$cob=="South Africa"|mig$cob=="Sri Lanka"|
+                mig$cob=="Sudan"|mig$cob=="Ethiopia"| mig$cob=="Bangladesh"|mig$cob=="Pakistan",]
+Afghanistan<-mig[mig$cob=="Greece"|mig$cob=="Italy"|mig$cob=="Great Britain"|mig$cob=="New Zealand"|
+                   mig$cob=="Vietnam"|mig$cob=="Cambodia"|mig$cob=="Philippines"|mig$cob=="Malaysia"|mig$cob=="Thailand"|
+                   mig$cob=="Hong Kong"| mig$cob=="Sudan"|
+                   mig$cob=="Indonesia"| mig$cob=="South Africa"|mig$cob=="Sri Lanka"|
+                   mig$cob=="Sudan"|mig$cob=="Ethiopia"| mig$cob=="Bangladesh"|mig$cob=="Pakistan"|
+                   mig$cob=="Afghanistan",]
+Myanmar<-mig[mig$cob=="Greece"|mig$cob=="Italy"|mig$cob=="Great Britain"|mig$cob=="New Zealand"|
+               mig$cob=="Vietnam"|mig$cob=="Cambodia"|mig$cob=="Philippines"|mig$cob=="Malaysia"|mig$cob=="Thailand"|
+               mig$cob=="Hong Kong"| mig$cob=="Sudan"|
+               mig$cob=="Indonesia"| mig$cob=="South Africa"|mig$cob=="Sri Lanka"|
+               mig$cob=="Sudan"|mig$cob=="Ethiopia"| mig$cob=="Bangladesh"|mig$cob=="Pakistan"|
+               mig$cob=="Afghanistan"|mig$cob=="Myanmar",]
+PNG<-mig[mig$cob=="Greece"|mig$cob=="Italy"|mig$cob=="Great Britain"|mig$cob=="New Zealand"|
+           mig$cob=="Vietnam"|mig$cob=="Cambodia"|mig$cob=="Philippines"|mig$cob=="Malaysia"|mig$cob=="Thailand"|
+           mig$cob=="Hong Kong"| mig$cob=="Sudan"|
+           mig$cob=="Indonesia"| mig$cob=="South Africa"|mig$cob=="Sri Lanka"|
+           mig$cob=="Sudan"|mig$cob=="Ethiopia"| mig$cob=="Bangladesh"|mig$cob=="Pakistan"|
+           mig$cob=="Afghanistan"|mig$cob=="Myanmar"|mig$cob=="Papua New Guinea",]
+Nepal<-mig[mig$cob=="Greece"|mig$cob=="Italy"|mig$cob=="Great Britain"|mig$cob=="New Zealand"|
+             mig$cob=="Vietnam"|mig$cob=="Cambodia"|mig$cob=="Philippines"|mig$cob=="Malaysia"|mig$cob=="Thailand"|
+             mig$cob=="Hong Kong"| mig$cob=="Sudan"|
+             mig$cob=="Indonesia"| mig$cob=="South Africa"|mig$cob=="Sri Lanka"|
+             mig$cob=="Sudan"|mig$cob=="Ethiopia"| mig$cob=="Bangladesh"|mig$cob=="Pakistan"|
+             mig$cob=="Afghanistan"|mig$cob=="Myanmar"|mig$cob=="Papua New Guinea"| mig$cob=="Nepal",]
+
+India<-mig[mig$cob=="Greece"|mig$cob=="Italy"|mig$cob=="Great Britain"|mig$cob=="New Zealand"|
+        mig$cob=="Vietnam"|mig$cob=="Cambodia"|mig$cob=="Philippines"|mig$cob=="Malaysia"|mig$cob=="Thailand"|
+        mig$cob=="Hong Kong"| mig$cob=="Sudan"|
+        mig$cob=="Indonesia"| mig$cob=="South Africa"|mig$cob=="Sri Lanka"|
+        mig$cob=="Sudan"|mig$cob=="Ethiopia"| mig$cob=="Bangladesh"|mig$cob=="Pakistan"|
+        mig$cob=="Afghanistan"|mig$cob=="Myanmar"|mig$cob=="Papua New Guinea"| mig$cob=="Nepal"|mig$cob=="India",]
+China<-mig[mig$cob=="Greece"|mig$cob=="Italy"|mig$cob=="Great Britain"|mig$cob=="New Zealand"|
+              mig$cob=="Vietnam"|mig$cob=="Cambodia"|mig$cob=="Philippines"|mig$cob=="Malaysia"|mig$cob=="Thailand"|
+              mig$cob=="Hong Kong"| mig$cob=="Sudan"|
+              mig$cob=="Indonesia"| mig$cob=="South Africa"|mig$cob=="Sri Lanka"|
+              mig$cob=="Sudan"|mig$cob=="Ethiopia"| mig$cob=="Bangladesh"|mig$cob=="Pakistan"|
+              mig$cob=="Afghanistan"|mig$cob=="Myanmar"|mig$cob=="Papua New Guinea"| mig$cob=="Nepal"|
+             mig$cob=="India"|mig$cob=="China",]
+
+Pakistan$pop2[Pakistan$cob=="Thailand"]<-70000
+Pakistan$pop2[Pakistan$cob=="Bangladesh"]<- 70000
+Afghanistan$pop2[Afghanistan$cob=="Thailand"]<-70000
+Afghanistan$pop2[Afghanistan$cob=="Bangladesh"]<- 70000
+Afghanistan$pop2[Afghanistan$cob=="Pakistan"]<- 70000
+Afghanistan$pop2[Afghanistan$cob=="Ethiopia"]<- 70000
+
+Malaysia$pop2[Malaysia$cob=="Cambodia"]<- 70000
+Thailand$pop2[Thailand$cob=="Cambodia"]<- 70000
+PHL$pop2[PHL$cob=="Cambodia"]<- 70000
+HongKong$pop2[HongKong$cob=="Cambodia"]<- 70000
+Indonesia$pop2[Indonesia$cob=="Cambodia"]<- 70000
+SouthAfrica$pop2[SouthAfrica$cob=="Cambodia"]<- 70000
+SriLanka$pop2[SriLanka$cob=="Cambodia"]<- 70000
+Sudan$pop2[Sudan$cob=="Cambodia"]<- 70000
+Ethiopia$pop2[Ethiopia$cob=="Cambodia"]<- 70000
+Bangladesh$pop2[Bangladesh$cob=="Cambodia"]<- 70000
+Pakistan$pop2[Pakistan$cob=="Cambodia"]<- 70000
+Afghanistan$pop2[Afghanistan$cob=="Cambodia"]<- 70000
+Myanmar$pop2[Myanmar$cob=="Cambodia"]<- 70000
+PNG$pop2[PNG$cob=="Cambodia"]<- 70000
+Nepal$pop2[Nepal$cob=="Cambodia"]<- 70000
+India$pop2[India$cob=="Cambodia"]<- 70000
+China$pop2[China$cob=="Cambodia"]<- 70000
+
+Thailand$pop2[Thailand$cob=="Malaysia"]<- 70000
+HongKong$pop2[HongKong$cob=="Malaysia"]<- 70000
+Indonesia$pop2[Indonesia$cob=="Malaysia"]<- 70000
+SouthAfrica$pop2[SouthAfrica$cob=="Malaysia"]<- 70000
+SriLanka$pop2[SriLanka$cob=="Malaysia"]<- 70000
+Sudan$pop2[Sudan$cob=="Malaysia"]<- 70000
+Ethiopia$pop2[Ethiopia$cob=="Malaysia"]<- 70000
+Bangladesh$pop2[Bangladesh$cob=="Malaysia"]<- 70000
+Pakistan$pop2[Pakistan$cob=="Malaysia"]<- 70000
+Afghanistan$pop2[Afghanistan$cob=="Malaysia"]<- 70000
+Myanmar$pop2[Myanmar$cob=="Malaysia"]<- 70000
+PNG$pop2[PNG$cob=="Malaysia"]<- 70000
+Nepal$pop2[Nepal$cob=="Malaysia"]<- 70000
+India$pop2[India$cob=="Malaysia"]<- 70000
+China$pop2[China$cob=="Malaysia"]<- 70000
+
+HongKong$pop2[HongKong$cob=="Thailand"]<- 70000
+Indonesia$pop2[Indonesia$cob=="Thailand"]<- 70000
+SouthAfrica$pop2[SouthAfrica$cob=="Thailand"]<- 70000
+SriLanka$pop2[SriLanka$cob=="Thailand"]<- 70000
+Sudan$pop2[Sudan$cob=="Thailand"]<- 70000
+Ethiopia$pop2[Ethiopia$cob=="Thailand"]<- 70000
+Bangladesh$pop2[Bangladesh$cob=="Thailand"]<- 70000
+Pakistan$pop2[Pakistan$cob=="Thailand"]<- 70000
+Afghanistan$pop2[Afghanistan$cob=="Thailand"]<- 70000
+Myanmar$pop2[Myanmar$cob=="Thailand"]<- 70000
+PNG$pop2[PNG$cob=="Thailand"]<- 70000
+Nepal$pop2[Nepal$cob=="Thailand"]<- 70000
+India$pop2[India$cob=="Thailand"]<- 70000
+China$pop2[China$cob=="Thailand"]<- 70000
+
+Indonesia$pop2[Indonesia$cob=="Hong Kong"]<- 70000
+SouthAfrica$pop2[SouthAfrica$cob=="Hong Kong"]<- 70000
+SriLanka$pop2[SriLanka$cob=="Hong Kong"]<- 70000
+Sudan$pop2[Sudan$cob=="Hong Kong"]<- 70000
+Ethiopia$pop2[Ethiopia$cob=="Hong Kong"]<- 70000
+Bangladesh$pop2[Bangladesh$cob=="Hong Kong"]<- 70000
+Pakistan$pop2[Pakistan$cob=="Hong Kong"]<- 70000
+Afghanistan$pop2[Afghanistan$cob=="Hong Kong"]<- 70000
+Myanmar$pop2[Myanmar$cob=="Hong Kong"]<- 70000
+PNG$pop2[PNG$cob=="Hong Kong"]<- 70000
+Nepal$pop2[Nepal$cob=="Hong Kong"]<- 70000
+India$pop2[India$cob=="Hong Kong"]<- 70000
+China$pop2[China$cob=="Hong Kong"]<- 70000
+
+SouthAfrica$pop2[SouthAfrica$cob=="Indonesia"]<- 70000
+SriLanka$pop2[SriLanka$cob=="Indonesia"]<- 70000
+Sudan$pop2[Sudan$cob=="Indonesia"]<- 70000
+Ethiopia$pop2[Ethiopia$cob=="Indonesia"]<- 70000
+Bangladesh$pop2[Bangladesh$cob=="Indonesia"]<- 70000
+Pakistan$pop2[Pakistan$cob=="Indonesia"]<- 70000
+Afghanistan$pop2[Afghanistan$cob=="Indonesia"]<- 70000
+Myanmar$pop2[Myanmar$cob=="Indonesia"]<- 70000
+PNG$pop2[PNG$cob=="Indonesia"]<- 70000
+Nepal$pop2[Nepal$cob=="Indonesia"]<- 70000
+India$pop2[India$cob=="Indonesia"]<- 70000
+China$pop2[China$cob=="Indonesia"]<- 70000
+
+
+Bangladesh$pop2[Bangladesh$cob=="Sudan"]<- 70000
+Pakistan$pop2[Pakistan$cob=="Sudan"]<- 70000
+Afghanistan$pop2[Afghanistan$cob=="Sudan"]<- 70000
+Myanmar$pop2[Myanmar$cob=="Sudan"]<- 70000
+PNG$pop2[PNG$cob=="Sudan"]<- 70000
+Nepal$pop2[Nepal$cob=="Sudan"]<- 70000
+India$pop2[India$cob=="Sudan"]<- 70000
+China$pop2[China$cob=="Sudan"]<- 70000
+
+Ethiopia$pop2[Ethiopia$cob=="Sri Lanka"]<- 70000
+Bangladesh$pop2[Bangladesh$cob=="Sri Lanka"]<- 70000
+Pakistan$pop2[Pakistan$cob=="Sri Lanka"]<- 70000
+Afghanistan$pop2[Afghanistan$cob=="Sri Lanka"]<- 70000
+Myanmar$pop2[Myanmar$cob=="Sri Lanka"]<- 70000
+PNG$pop2[PNG$cob=="Sri Lanka"]<- 70000
+Nepal$pop2[Nepal$cob=="Sri Lanka"]<- 70000
+India$pop2[India$cob=="Sri Lanka"]<- 70000
+China$pop2[China$cob=="Sri Lanka"]<- 70000
+
+Bangladesh$pop2[Bangladesh$cob=="Ethiopia"]<- 70000
+Pakistan$pop2[Pakistan$cob=="Ethiopia"]<- 70000
+Afghanistan$pop2[Afghanistan$cob=="Ethiopia"]<- 70000
+Myanmar$pop2[Myanmar$cob=="Ethiopia"]<- 70000
+PNG$pop2[PNG$cob=="Ethiopia"]<- 70000
+Nepal$pop2[Nepal$cob=="Ethiopia"]<- 70000
+India$pop2[India$cob=="Ethiopia"]<- 70000
+China$pop2[China$cob=="Ethiopia"]<- 70000
+
+Pakistan$pop2[Pakistan$cob=="Bangladesh"]<- 70000
+Afghanistan$pop2[Afghanistan$cob=="Bangladesh"]<- 70000
+Myanmar$pop2[Myanmar$cob=="Bangladesh"]<- 70000
+PNG$pop2[PNG$cob=="Bangladesh"]<- 70000
+Nepal$pop2[Nepal$cob=="Bangladesh"]<- 70000
+India$pop2[India$cob=="Bangladesh"]<- 70000
+China$pop2[China$cob=="Bangladesh"]<- 70000
+
+Afghanistan$pop2[Afghanistan$cob=="Pakistan"]<- 70000
+Myanmar$pop2[Myanmar$cob=="Pakistan"]<- 70000
+PNG$pop2[PNG$cob=="Pakistan"]<- 70000
+Nepal$pop2[Nepal$cob=="Pakistan"]<- 70000
+India$pop2[India$cob=="Pakistan"]<- 70000
+China$pop2[China$cob=="Pakistan"]<- 70000
+
+Myanmar$pop2[Myanmar$cob=="Afghanistan"]<- 70000
+PNG$pop2[PNG$cob=="Afghanistan"]<- 70000
+Nepal$pop2[Nepal$cob=="Afghanistan"]<- 70000
+India$pop2[India$cob=="Afghanistan"]<- 70000
+China$pop2[China$cob=="Afghanistan"]<- 70000
+
+Nepal$pop2[Nepal$cob=="Myanmar"]<- 70000
+India$pop2[India$cob=="Myanmar"]<- 70000
+China$pop2[China$cob=="Myanmar"]<- 70000
+
+Nepal$pop2[Nepal$cob=="Papua New Guinea"]<- 70000
+India$pop2[India$cob=="Papua New Guinea"]<- 70000
+China$pop2[China$cob=="Papua New Guinea"]<- 70000
+
+India$pop2[India$cob=="Philippines"]<- 70000
+China$pop2[China$cob=="Philippines"]<- 70000
+China$pop2[China$cob=="New Zealand"]<- 70000
+
+
+#I need 17 fill colours
+colcount<-length(unique(mig$cob))
+#17
+getPalette<-colorRampPalette(brewer.pal(12, "Paired"))
+
+# Make list of variable names to loop over.
+var_list = combn(names(iris)[1:3], 2, simplify=FALSE)
+DFL<-list(Italy,Greece,GBR,NZL,Vietnam, Cambodia,
+          PHL,Malaysia,Thailand,
+          HongKong,Indonesia,SouthAfrica,SriLanka,Sudan,
+          Ethiopia,Bangladesh,Pakistan, Afghanistan,Myanmar,
+          PNG,Nepal,India, China)
+# Make plots.
+for (i in 1:length(DFL)) {
+  df1 = as.data.frame(DFL[i])
+  file_name = paste0(i,c(".tiff"))
+  tiff(file_name, width = 7, height = 5, units = 'in', res = 300)
+  plotdf1 <- ggplot(df1, aes(yoa, pop, fill=cob))+
+    geom_area(alpha=0.8,colour="black",position = "identity",stat="identity")+
+    labs(x = "Year of arrival", y = "Population") +
+    scale_y_continuous(breaks = seq(0, 55000, 10000), limits = c(0, 55000))+
+    scale_x_continuous(breaks = seq(1920,2016, 10), limits = c(1920, 2016))+
+    scale_fill_manual(values = getPalette(colcount))+
+    geom_text(data=df1, aes(yoa2, pop2, 
+                           label = cob,
+                           size=1.8))+
+    #to turn the background white
+    theme_bw() +
+    #to eliminate background, gridlines, and chart border
+    theme(
+      legend.position = "none"
+      ,plot.background = element_blank()
+      ,panel.grid.major = element_blank()
+      ,panel.grid.minor = element_blank()
+      ,panel.border = element_blank())+  
+    #to draw x and y axis line
+    theme(axis.line = element_line(color = 'black')) 
+  print(plotdf1)
+  dev.off()
+}
+
+
+
+
+
+dev.off()
+ggplot(China, aes(yoa, pop, fill=cob))+
+  geom_area(alpha=0.8,colour="black",position = "identity",stat="identity")+
+  labs(x = "Year of arrival", y = "Population") +
+  scale_y_continuous(breaks = seq(0, 55000, 10000), limits = c(0, 55000))+
+  scale_x_continuous(breaks = seq(1920,2016, 10), limits = c(1920, 2016))+
+  scale_fill_manual(values = getPalette(colcount))+
+  geom_text(data=China, aes(yoa2, pop2, 
+                          label = cob,
+                          size=1.8))+
+  #to turn the background white
+  theme_bw() +
+  #to eliminate background, gridlines, and chart border
+  theme(
+    legend.position = "none"
+    ,plot.background = element_blank()
+    ,panel.grid.major = element_blank()
+    ,panel.grid.minor = element_blank()
+    ,panel.border = element_blank())+  
+  #to draw x and y axis line
+  theme(axis.line = element_line(color = 'black')) 
+
+# Save plots to tiff. Makes a separate file for each plot.
+for (i in DFL) {
+  file_name = paste0(i,c(".tiff"))
+  tiff(file_name, width = 7, height = 5, units = 'in', res = 300)
+  print(plot_list[i])
+  dev.off()
+}
+
+
+# Save plots to tiff. Makes a separate file for each plot.
+for (i in 1:3) {
+  file_name = paste("iris_plot_", i, ".tiff", sep="")
+  tiff(file_name)
+  print(plot_list[[i]])
+  dev.off()
+}
+
+
+
+DFL<-lapply(DFL, function(df){
+  Plot.tiff <- paste0(df,c(".tiff"))
+  tiff("Plot.tiff", width = 7, height = 5, units = 'in', res = 300)
+  graphy<-ggplot(df, aes(yoa, pop, fill=cob))+
+    geom_area(alpha=0.8,position = "identity",stat="identity")+
+    labs(x = "Year of arrival", y = "Population") +
+    scale_y_continuous(breaks = seq(0, 55000, 10000), limits = c(0, 55000))+
+    scale_x_continuous(breaks = seq(1920,2016, 10), limits = c(1920, 2016))+
+    scale_fill_manual(values = getPalette(colcount))+
+    geom_text(data=df, aes(yoa2, pop2, 
+                               label = cob,
+                               size=1.8))+
+    #to turn the background white
+    theme_bw() +
+    #to eliminate background, gridlines, and chart border
+    theme(
+      legend.position = "none"
+      ,plot.background = element_blank()
+      ,panel.grid.major = element_blank()
+      ,panel.grid.minor = element_blank()
+      ,panel.border = element_blank())+  
+    #to draw x and y axis line
+    theme(axis.line = element_line(color = 'black')) 
+  dev.off()
+})
+
+
+dev.off()
+
+
+Plot.tiff <- paste0(df,c(".tiff"))
+tiff("Plot.tiff", width = 7, height = 5, units = 'in', res = 300)
+ggplot(India, aes(yoa, pop, fill=cob))+
+  geom_area(alpha=0.8,position = "identity",stat="identity")+
+  labs(x = "Year of arrival", y = "Population") +
+  scale_y_continuous(breaks = seq(0, 55000, 10000), limits = c(0, 55000))+
+  scale_x_continuous(breaks = seq(1920,2016, 10), limits = c(1920, 2016))+
+  scale_fill_manual(values = getPalette(colcount))+
+  geom_text(data=India, aes(yoa2, pop2, 
+                         label = cob,
+                         size=1.8))+
+  #to turn the background white
+  theme_bw() +
+  #to eliminate background, gridlines, and chart border
+  theme(
+    legend.position = "none"
+    ,plot.background = element_blank()
+    ,panel.grid.major = element_blank()
+    ,panel.grid.minor = element_blank()
+    ,panel.border = element_blank())+  
+  #to draw x and y axis line
+  theme(axis.line = element_line(color = 'black')) 
+  dev.off()
+  
+Italy
+Greece
+GreatBritain 
+NewZealand
+Vietnam
+Cambodia
+Philippines
+Malaysia
+Thailand
+Hong Kong
+Indonesia
+South Africa
+Sri Lanka
+Sudan
+Ethiopia
+Bangladesh
+Pakistan
+Afghanistan
+Myanmar
+Papua New Guinea
+Nepal
+India
+China
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+miglist<-c("BGD","CHN")
+
+
+miglist<-c("BGD","CHN","ETH","IND","IDN","GCE","GBR","NZL","RUS",
+              "MMR","PAK","PHL","RUS", "ZAF","THA","VNM","LKA",
+              "HKG",
+              "KHM","PNG","KHM","PHL","NPL","AFG","SDN","ITA")
+
+mig<-cobyoa[cobyoa$iso3 %in% miglist,]
+mig<-mig[,1:3]
+#removing NA values and aggregating by cob
+mig <- subset(mig,!is.na(mig$yoa))
+mig<-mig %>%
+  group_by(cob,yoa) %>% # aggregating by iso3 
+  summarise_all(funs(sum))
+
+
+keep<-highTBcheck[highTBcheck["pop"]>10000,]
+keep<-unique(keep$cob)
+highTB<-highTB[highTB$cob %in% keep,]
+
+#I need 17 fill colours
+colcount<-length(unique(highTB$cob))
+#17
+getPalette<-colorRampPalette(brewer.pal(12, "Paired"))
+
+
+for (j in miglist) { 
+  cn<-mig[mig$cob=="j",]
+  ggplot(cn, aes(x = yoa, y = pop, fill = cob ))+
+    geom_area(position = 'stack') +
+    labs(x = "Year of arrival", y = "Population", fill="Country of birth") +
+    scale_y_continuous(breaks = seq(0, 200000, 10000))+
+    scale_x_continuous(breaks = seq(1920,2016, 10), limits = c(1920, 2016))+
+    scale_fill_manual(values = getPalette(colcount))+
+    guides(fill=guide_legend(nrow=6))+
+    #to turn the background white
+    theme_bw() +
+    #to eliminate background, gridlines, and chart border
+    theme(
+      legend.position = c(0.3, 0.7)
+      ,plot.background = element_blank()
+      ,panel.grid.major = element_blank()
+      ,panel.grid.minor = element_blank()
+      ,panel.border = element_blank())+  
+    #to draw x and y axis line
+    theme(axis.line = element_line(color = 'black'))  
+  filename<-paste(j, ".jpg", sep = "")
+  dev.copy(jpg,'filename')
+  dev.off()
+}
+
+miglist<-c("BGD","CHN","ETH","IND","IDN","GRC","GBR","NZL","RUS",
+           "MMR","PAK","PHL","RUS", "ZAF","THA","VNM","LKA",
+           "HKG",
+           "KHM","PNG","KHM","PHL","NPL","AFG","SDN","ITA")
+mig<-cobyoa[cobyoa$iso3 %in% miglist,]
+mig<-mig[,1:3]
+#removing NA values and aggregating by cob
+mig <- subset(mig,!is.na(mig$yoa))
+mig<-mig %>%
+  group_by(cob,yoa) %>% # aggregating by iso3 
+  summarise_all(funs(sum))
+unique(mig$cob)
+
+#Ordering the countries correctly
+mig$cob <- factor(mig$cob, 
+                  levels = c("Italy","Greece", "Great Britain", 
+                              "New Zealand","Vietnam","Cambodia",
+                             "Philippines","Thailand","Hong Kong","China",
+                             "India",
+                             "Indonesia",
+                             "Russian Federation",
+                             "South Africa","Sri Lanka",
+                             "Sudan","Ethiopia","Bangladesh",
+                             "Pakistan","Afghanistan","Myanmar",
+                             "Papua New Guinea","Nepal"))
+mig$ref <- 0
+mig$ref[mig$cob == "Italy"]<-1
+mig$ref[mig$cob == "Greece"]<-2
+mig$ref[mig$cob == "Great Britain"]<-3
+mig$ref[mig$cob == "New Zealand"]<-4
+mig$ref[mig$cob == "Vietnam"]<-5
+mig$ref[mig$cob == "Cambodia"]<-6
+mig$ref[mig$cob == "Philippines"]<-7
+mig$ref[mig$cob == "Thailand"]<-8
+mig$ref[mig$cob == "Hong Kong"]<-9
+mig$ref[mig$cob == "China"]<-10
+mig$ref[mig$cob == "India"]<-11
+mig$ref[mig$cob == "Indonesia"]<-12
+mig$ref[mig$cob == "Russian Federation"]<-13
+mig$ref[mig$cob == "South Africa"]<-14
+mig$ref[mig$cob == "Sri Lanka"]<-15
+mig$ref[mig$cob == "Sudan"]<-16
+mig$ref[mig$cob == "Ethiopia"]<-17
+mig$ref[mig$cob == "Bangladesh"]<-18
+mig$ref[mig$cob == "Pakistan"]<-19
+mig$ref[mig$cob == "Afghanistan"]<-20
+mig$ref[mig$cob == "Myanmar"]<-21
+mig$ref[mig$cob == "Papua New Guinea"]<-22
+mig$ref[mig$cob == "Nepal"]<-23
+
+
+
+#I need more fill colours
+colcount<-length(unique(mig$cob))
+getPalette<-colorRampPalette(brewer.pal(12, "Paired"))
+
+p <- mig %>%
+  pull(cob) %>% 
+  levels() %>% 
+  as.integer() %>%
+  map_df(~ mig %>% filter(cob %in% 1:.x) %>% mutate(cob = .x)) %>%
+  ggplot(aes(x = yoa, y = pop,  frame=cob)) + 
+  geom_boxplot(position = "identity")
+  Sys.setenv(PATH = paste("C:/Program Files/ImageMagick", Sys.getenv("PATH"), sep = ";"))
+  gganimate(p, interval = 0.4)
+  
+p<-ggplot(mig, aes(yoa, pop, fill=cob)) +
+    geom_point()
+Sys.setenv(PATH = paste("C:/Program Files/ImageMagick", Sys.getenv("PATH"), sep = ";"))
+gganimate(p, "output.gif", interval = 0.4)
+
+###Cumulative works?
+dev.off()
+ggplot(mig, aes(x = yoa, y = pop,  frame=cob, cumulative=TRUE))+
+  geom_area(alpha=0.5, position = "identity")+
+  labs(x = "Year of arrival", y = "Population", fill="Country of birth") +
+  scale_y_continuous(breaks = seq(0, 200000, 10000))+
+  scale_x_continuous(breaks = seq(1920,2016, 10), limits = c(1920, 2016))+
+  scale_fill_manual(values = getPalette(colcount))+
+  #guides(fill=guide_legend(nrow=6))+
+  #geom_text(aes(label=yoa), position=position_dodge(width=0.9), vjust=-0.25)+
+  geom_text(data=cnames, aes(yoa, pop, 
+                             label = cob, 
+                             size=3,fontface="bold"))+
+  #to turn the background white
+  theme_bw() +
+  #to eliminate background, gridlines, and chart border
+  theme(
+    legend.position = "none"
+    ,plot.background = element_blank()
+    ,panel.grid.major = element_blank()
+    ,panel.grid.minor = element_blank()
+    ,panel.border = element_blank())+  
+  #to draw x and y axis line
+  theme(axis.line = element_line(color = 'black')) 
+
+
+###Cumulative doesn't work??
+dev.off()
+p<-ggplot(mig, aes(x = yoa, y = pop, fill=cob, frame=cob))+
+    geom_area(alpha=0.5, position = "identity") +
+    labs(x = "Year of arrival", y = "Population", fill="Country of birth") +
+    scale_y_continuous(breaks = seq(0, 200000, 10000))+
+    scale_x_continuous(breaks = seq(1920,2016, 10), limits = c(1920, 2016))+
+    scale_fill_manual(values = getPalette(colcount))+
+    #guides(fill=guide_legend(nrow=6))+
+  #geom_text(aes(label=yoa), position=position_dodge(width=0.9), vjust=-0.25)+
+  geom_text(data=cnames, aes(yoa, pop, 
+                             label = cob, 
+                             size=3,fontface="bold"))+
+    #to turn the background white
+    theme_bw() +
+    #to eliminate background, gridlines, and chart border
+    theme(
+      legend.position = "none"
+      ,plot.background = element_blank()
+      ,panel.grid.major = element_blank()
+      ,panel.grid.minor = element_blank()
+      ,panel.border = element_blank())+  
+    #to draw x and y axis line
+    theme(axis.line = element_line(color = 'black')) 
+Sys.setenv(PATH = paste("C:/Program Files/ImageMagick", Sys.getenv("PATH"), sep = ";"))
+gganimate(p, interval = 0.4)
+
+
+# this creates some data for geom text if you want text on the map
+
+
+cnames <- aggregate(cbind(yoa) ~ cob , data=mig,   
+                      FUN=function(x) median(x)+20)
+cnames$pop<-1834
+##pretty good, I could fix up a couple of things
+cnames$yoa[cnames$cob=="Greece"]<-1961
+cnames$yoa[cnames$cob=="Ethiopia"]<-2005
+cnames$yoa[cnames$cob=="India"]<-2005
+cnames$yoa[cnames$cob=="China"]<-2005
+cnames$yoa[cnames$cob=="Sudan"]<-2005
+cnames$yoa[cnames$cob=="Bangladesh"]<-2005
+cnames$yoa[cnames$cob=="Afghanistan"]<-2005
+cnames$yoa[cnames$cob=="New Zealand"]<-1995
+cnames$yoa[cnames$cob=="Afghanistan"]<-2005
+cnames$yoa[cnames$cob=="Vietnam"]<-1995
+cnames$yoa[cnames$cob=="Italy"]<-1960
+cnames$yoa[cnames$cob=="Thailand"]<-2007
+cnames$yoa[cnames$cob=="Indonesia"]<-2007
+cnames$yoa[cnames$cob=="Nepal"]<-2012
+cnames$yoa[cnames$cob=="Pakistan"]<- 2007
+cnames$yoa[cnames$cob=="South Africa"]<-2005
+cnames$yoa[cnames$cob=="Cambodia"]<-1995
+cnames$yoa[cnames$cob=="Hong Kong"]<-1992
+cnames$yoa[cnames$cob=="Sri Lanka"]<-2006
+
+###NOT BAD!!!! 
+dev.off()
+p<-ggplot(mig, aes(yoa, pop, fill=cob))+
+  geom_area(data=mig, aes(yoa, pop, fill=cob,frame=cob), position = "identity",stat="identity")+
+  labs(x = "Year of arrival", y = "Population") +
+  scale_y_continuous(breaks = seq(0, 200000, 10000))+
+  scale_x_continuous(breaks = seq(1920,2016, 10), limits = c(1920, 2016))+
+  scale_fill_manual(values = getPalette(colcount))+
+  geom_text(data=cnames, aes(yoa, pop, 
+          label = cob, frame=cob,
+          size=3,fontface="bold"))+
+  #guides(fill=guide_legend(nrow=6))+
+  #to turn the background white
+  theme_bw() +
+  #to eliminate background, gridlines, and chart border
+  theme(
+    legend.position = "none"
+    ,plot.background = element_blank()
+    ,panel.grid.major = element_blank()
+    ,panel.grid.minor = element_blank()
+    ,panel.border = element_blank())+  
+  #to draw x and y axis line
+  theme(axis.line = element_line(color = 'black')) 
+Sys.setenv(PATH = paste("C:/Program Files/ImageMagick/convert.exe",
+                        Sys.getenv("PATH"), sep = ";"))
+gganimate(p, title_frame = FALSE,interval = 2)
+
+#####GIVE UP AND DO IT MANUALLY _ DON"T THINK ABOUT RETRYING THIS!!!!!!!!
+
+imconvertstring<-"\"c:\\ImageMagick\\convert.exe\" -delay 1x%d %s*.png %s.%s"
+
+gganimate(p, "output.gif")
+
+gganimate_save(p, filename = "migration.avi", saver = avi)
+
+dev.off()
+p<-ggplot(mig, aes(yoa, pop,frame = cob, cumulative=TRUE))+
+  geom_bar(position = "identity",stat="identity")
+Sys.setenv(PATH = paste("C:/ImageMagick", Sys.getenv("PATH"), sep = ";"))
+gganimate(p, interval = 2,cumulative=TRUE)
+  labs(x = "Year of arrival", y = "Population") +
+  scale_y_continuous(breaks = seq(0, 200000, 10000))+
+  scale_x_continuous(breaks = seq(1920,2016, 10), limits = c(1920, 2016))+
+  scale_fill_manual(values = getPalette(colcount))+
+  #geom_text(aes(label=yoa), position=position_dodge(width=0.9), vjust=-0.25)+
+  geom_text(data=cnames, aes(yoa, pop, 
+                             label = cob, 
+                             size=3,fontface="bold"))+
+  #guides(fill=guide_legend(nrow=6))+
+  #to turn the background white
+  theme_bw() +
+  #to eliminate background, gridlines, and chart border
+  theme(
+    legend.position = "none"
+    ,plot.background = element_blank()
+    ,panel.grid.major = element_blank()
+    ,panel.grid.minor = element_blank()
+    ,panel.border = element_blank())+  
+  #to draw x and y axis line
+  theme(axis.line = element_line(color = 'black')) 
+Sys.setenv(PATH = paste("C:/ImageMagick", Sys.getenv("PATH"), sep = ";"))
+gganimate(p, interval = 2)
+
+
+
+####I need to sort the labels
+
+  filename<-paste(j, ".jpg", sep = "")
+  
+  
+  dev.copy(png,'India.jpg')
+  dev.off()
+  
+  
+dev.off()
+ggplot(highTB, aes(x = yoa, y = pop, fill = cob ))+
+  geom_area(position = 'stack') +
+  labs(x = "Year of arrival", y = "Population", fill="Country of birth") +
+  scale_y_continuous(breaks = seq(0, 200000, 10000))+
+  scale_x_continuous(breaks = seq(1920,2016, 10), limits = c(1920, 2016))+
+  scale_fill_manual(values = getPalette(colcount))+
+  guides(fill=guide_legend(nrow=6))+
+  #to turn the background white
+  theme_bw() +
+  #to eliminate background, gridlines, and chart border
+  theme(
+    legend.position = c(0.3, 0.7)
+    ,plot.background = element_blank()
+    ,panel.grid.major = element_blank()
+    ,panel.grid.minor = element_blank()
+    ,panel.border = element_blank())+  
+  #to draw x and y axis line
+  theme(axis.line = element_line(color = 'black'))  
+

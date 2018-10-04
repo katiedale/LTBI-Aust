@@ -1,0 +1,22 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1519181579098.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "16DC58F",
+    "lastKnownWriteTime" : 1518674044,
+    "last_content_update" : 1518674044,
+    "path" : "H:/Katie/PhD/LTBI project/LTBI-Aust/Data prep/Australia-wide data prep 5000rep.R",
+    "project_path" : "Australia-wide data prep 5000rep.R",
+    "properties" : {
+        "cursorPosition" : "1763,0",
+        "scrollLine" : "1485"
+    },
+    "relative_order" : 3,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

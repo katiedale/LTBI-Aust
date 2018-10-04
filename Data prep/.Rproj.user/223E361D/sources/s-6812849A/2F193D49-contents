@@ -1,0 +1,590 @@
+#install.packages("swirl")
+#install.packages("dplyr")
+#install.packages("ggplot2")
+#install.packages ("quantmod")
+#install.packages ("sm")
+#install.packages("countrycode")
+#install.packages("stringr")
+#install.packages("reshape2")
+#install.packages("zoo")
+#install.packages("data.table")
+#install.packages("plyr")
+library(zoo)
+library(plyr)
+library(data.table)
+library(stringr)
+library(quantmod)
+library(dplyr)
+library(sm)
+library(reshape2)
+library(countrycode)
+library(ggplot2)
+library(reshape2)
+
+#Loading the the Australian 2016 Census data
+setwd("H:\\Katie\\PhD\\ABS data\\Greater capital city statistical areas\\2016 Greater capital city SA") #changes the working directory
+folder <-"H:\\Katie\\PhD\\ABS data\\Greater capital city statistical areas\\2016 Greater capital city SA\\" 
+Austdata <- list.files(path=folder, pattern="*.zip")  
+Aust <- lapply(Austdata,function(v) {
+  fns <- unzip(v, junkpaths = TRUE, exdir = tempdir())
+  xzip<-setNames(lapply(fns, read.csv, skip=10,header=T), basename(tools::file_path_sans_ext(fns)))
+})
+GCC16<- unlist(Aust,recursive=F)
+rm(Aust)
+statenames<-names(GCC16)
+
+# A function to fill down in the age columns
+filltheblanks <- function(x, missing=""){
+  rle <- rle(as.character(x))
+  empty <- which(rle$value==missing)
+  rle$values[empty] <- rle$value[empty-1] 
+  inverse.rle(rle)
+}
+
+
+
+# A function to replace the first two column names as age and yoa
+GCC16<-lapply(GCC16, function(df) {
+  names(df)[1] <- "age"[-ncol(df)]
+  names(df)[2] <- "yoa"[-ncol(df)]
+  df$age <- as.character(df$age)
+  df <- df[df$age!="INFO", ]
+  df <- df[df$age!="(c) Commonwealth of Australia 2017", ]
+  df <- df[df$age!="Dataset: 2016 Census of Population and Housing", ]
+  df <- df[df$age!="Age in Single Years (AGEP)", ]
+  df<-df[,-c(296:589)]
+  df$yoa<-as.character(df$yoa)
+  df$yoa[df$yoa=="Arrived 1 Jan 2016 - 9 August 2016"]<-"2016"
+  df$yoa<-replace(df$yoa, df$yoa =="Not stated", NA)
+  df$yoa<-replace(df$yoa, df$yoa =="Not applicable", NA)
+  df$yoa<-replace(df$yoa, df$yoa =="Overseas visitor", NA)
+  #Replacing all characters with nothing in yoa column
+  df$yoa <- gsub("\\D","",df$yoa)
+  df$yoa<-as.numeric(df$yoa)
+  #Replacing all characters with nothing in yoa column
+  df$age <- filltheblanks(df$age)
+  df <- df[df$age!="Total", ]
+  df$age <- gsub("\\D","",df$age)
+  df$age<-as.numeric(df$age)
+  df
+})
+
+##Removing any rows with no entries in age
+GCC16<-lapply(GCC16, function(df) {
+  df <- df[!is.na(df$age), ]
+  df
+})
+
+Bris<-GCC16[[1]]
+rm(Bris)
+
+
+#Reshaping the data
+GCC16<-lapply(GCC16, function(df) {
+  df<- melt(df, id=c("age", "yoa"))
+  names(df)[names(df)=="variable"] <- "cob"
+  names(df)[names(df)=="value"] <- "pop"
+  df$cob<-as.character(df$cob)
+  df
+})
+
+
+Bris<-GCC16[[1]]
+unique(Bris$cob)
+length(unique(Bris$cob))
+
+##Creating a variable with 2016 in it, so I can minus the age values from it to obtain year of birth (yob)
+GCC16<-lapply(GCC16, function(df) {
+  df$censusdate<-2016
+  df$censusdate<-as.numeric(df$censusdate)
+  df$yob<-df$censusdate-df$age
+  df$censusdate<-NULL
+  df
+})
+
+##Converting country names to ISO3 codes
+GCC16<-lapply(GCC16, function(df) {
+  df$cob[df$cob=="Australia..includes.External.Territories...nfd"]<-"Australia" 
+  df$cobiso3<-countrycode(df$cob, "country.name", "iso3c")
+  df$cobiso3[df$cob == "Japan.and.the.Koreas..nfd"] <- "JPN"
+  df$cobiso3[df$cob == "United.Kingdom..Channel.Islands.and.Isle.of.Man..nfd"] <- "GBR"
+  df$cobiso3[df$cob == "Channel.Islands"] <- "GBR"
+  df$cobiso3[df$cob == "Virgin.Islands..United.States"] <- "USA"
+  df$cobiso3[df$cob == "Americas..nfd"]<-"USA"
+  df$cobiso3[df$cob == "British.Antarctic.Territory"]<-"GBR"
+  df$cobiso3[df$cob == "Viet.Nam"]<-"VNM"
+  df$cobiso3[df$cob == "Northern.America..nfd"]<-"USA"
+  df$cobiso3[df$cob == "Faeroe.Islands"]<-"DNK"
+  df$cobiso3[df$cob == "Caribbean..nfd"]<-"BHS"
+  df$cobiso3[df$cob == "Central.America..nfd"]<-"CRI"
+  df$cobiso3[df$cob == "Central.and.West.Africa..nfd"]<-"CMR"
+  df$cobiso3[df$cob == "Central.Asia..nfd"]<-"KAZ"
+  df$cobiso3[df$cob == "Eastern.Europe..nfd"]<-"POL"
+  df$cobiso3[df$cob == "England"]<-"GBR"
+  df$cobiso3[df$cob == "Japan.and.the.Koreas..nfd"]<-"JPN"
+  df$cobiso3[df$cob == "Kosovo"]<-"SRB"
+  df$cobiso3[df$cob == "Mainland.South.East.Asia..nfd"]<-"THA"
+  df$cobiso3[df$cob == "Maritime.South.East.Asia..nfd"]<-"PHL"
+  df$cobiso3[df$cob == "Melanesia..nfd"]<-"VUT"
+  df$cobiso3[df$cob == "Micronesia..nfd"]<-"KIR"
+  df$cobiso3[df$cob == "Middle.East..nfd"]<-"SAU"
+  df$cobiso3[df$cob == "North.Africa..nfd"]<-"MAR"
+  df$cobiso3[df$cob == "North.Africa.and.the.Middle.East..nfd"]<-"EGY"
+  df$cobiso3[df$cob == "North.East.Asia..nfd"]<-"MNG"
+  df$cobiso3[df$cob == "North.West.Europe..nfd"]<-"FRA"
+  df$cobiso3[df$cob == "Northern.America..nfd"]<-"USA"
+  df$cobiso3[df$cob == "Northern.Europe..nfd"]<-"NLD"
+  df$cobiso3[df$cob == "Polynesia..excludes.Hawaii...nec"]<-"WSM"
+  df$cobiso3[df$cob == "Polynesia..excludes.Hawaii...nfd"]<-"WSM"
+  df$cobiso3[df$cob == "Scotland South.America..nec"]<-"GBR"
+  df$cobiso3[df$cob == "South.America..nfd"]<-"BRA"
+  df$cobiso3[df$cob == "South.East.Asia..nfd"]<-"THA"
+  df$cobiso3[df$cob == "South.Eastern.Europe..nfd"]<-"MKD"
+  df$cobiso3[df$cob == "Southern.and.Central.Asia..nfd"]<-"AFG"
+  df$cobiso3[df$cob == "Southern.and.East.Africa..nec"]<-"SOM"
+  df$cobiso3[df$cob == "Southern.and.East.Africa..nfd"]<-"SOM"
+  df$cobiso3[df$cob == "Southern.and.Eastern.Europe..nfd"]<-"MKD"
+  df$cobiso3[df$cob == "Southern.Asia..nfd"]<-"IND"
+  df$cobiso3[df$cob == "Southern.Europe..nfd"]<-"GRC"
+  df$cobiso3[df$cob == "Spanish.North.Africa"]<-"ESP"
+  df$cobiso3[df$cob == "Sub.Saharan.Africa..nfd"]<-"SOM"
+  df$cobiso3[df$cob == "United.Kingdom..Channel.Islands.and.Isle.of.Man..nf"]<-"GBR"
+  df$cobiso3[df$cob == "Scotland"]<-"GBR"
+  df$cobiso3[df$cob == "Wales"]<-"GBR"
+  df$cobiso3[df$cob == "Western.Europe..nfd"]<-"FRA"
+  df$cobiso3[df$cob == "South.America..nec"]<-"BRA"
+  df$cobiso3[df$cob == "Not.stated"]<-NA
+  df$cobiso3[df$cob == "Overseas.visitor"]<-NA
+  df$cobiso3[df$cob == "Inadequately.described"]<-NA
+  df$cobiso3[df$cob == "At.sea"]<-NA
+  df$cobiso3[df$cob == "China..excludes.SARs.and.Taiwan."]<-"CHN"
+  df
+})
+
+GCC16<-lapply(GCC16, function(df) {
+  df$cobiso3[df$cob == "Channel.Islands"] <- "GBR"
+  df$cobiso3[df$cob == "North.Africa..nec"] <- "MAR"
+  df$cobiso3[df$cob == "Sao.Tom?..and.Principe"] <- "GAB"
+  df$cobiso3[df$cob == "R?.union"] <- "FRA"
+  df
+})
+
+##Checking that all were converted okay
+Bris<-GCC16[[1]]
+Bris$cob[is.na(Bris$cobiso3)]
+rm(Bris)
+
+##Removing any rows with no entries
+GCC16<-lapply(GCC16, function(df) {
+  df <- df[df$pop != 0, ]
+  df
+})
+
+##Converting cob not represented in Dodd's data to others that are
+GCC16<-lapply(GCC16, function(df) {
+  df$cobiso3[df$cobiso3 == "IMN"] <- "GBR" #Isle of Man
+  df$cobiso3[df$cobiso3 == "GGY"] <- "GBR" #Guernsey
+  df$cobiso3[df$cobiso3 == "JEY"] <- "GBR" #Jersey
+  df$cobiso3[df$cobiso3 == "GIB"] <- "ESP" #Gibraltar
+  df$cobiso3[df$cobiso3 == "TWN"] <- "CHN" #Taiwan
+  df$cobiso3[df$cobiso3 == "SHN"] <- "GBR" #Saint Helena
+  df$cobiso3[df$cobiso3 == "FLK"] <- "GBR" #Falkland Islands (Malvinas)
+  df$cobiso3[df$cobiso3 == "REU"] <- "FRA" #Reunion
+  df$cobiso3[df$cobiso3 == "ATA"] <- "GBR" #Antarctica
+  df$cobiso3[df$cobiso3 == "NFK"] <- "AUS" #Norfolk Island
+  df
+})
+
+##Renaming cobiso3 to iso3
+GCC16<-lapply(GCC16, function(df) {
+  df$iso3<-df$cobiso3
+  df["cobiso3"]<-NULL
+  df
+})
+
+
+##GCC population summaries
+popsum<-lapply(GCC16, function(df) {
+  popsum<-sum(df$pop,na.rm=TRUE)
+  popsum
+})
+
+
+##What are the population counts and how many have missing information??
+GCC16check<-rbindlist(GCC16, idcol = "state")
+sum(GCC16check$pop,na.rm=TRUE)
+#Total population 22,022,590
+sum(GCC16check$pop[GCC16check$iso3=="AUS"],na.rm=TRUE)
+#Australian population 14,762,475
+sum(GCC16check$pop[GCC16check$iso3!="AUS"],na.rm=TRUE)
+#Overseas or missing iso3 population 5,422,277
+
+sum(GCC16check$pop[(is.na(GCC16check$yoa)&(GCC16check$iso3!="AUS"))|is.na(GCC16check$iso3)|(!is.na(GCC16check$yoa)& GCC16check$iso=="AUS")],na.rm=TRUE)
+#Altogether missing either yoa if not Australian, or iso3, or born in Aust with yoa: 2,023,969
+
+sum(GCC16check$pop[is.na(GCC16check$yoa)&(GCC16check$iso3!="AUS")& !is.na(GCC16check$iso3)],na.rm=TRUE)
+#Missing yoa only, not Australian: 186,131
+sum(GCC16check$pop[is.na(GCC16check$iso3)& !is.na(GCC16check$yoa)],na.rm=TRUE)
+#Missing iso3 only: 7,159
+sum(GCC16check$pop[is.na(GCC16check$iso3)&is.na(GCC16check$yoa) ],na.rm=TRUE)
+#Missing iso3 and yoa: 1,830,679
+
+##Subsetting all rows with NA in yoa, but a country of birth, 
+#and all those with yoa, but not country of birth and all those
+# born in Aust, but with a yoa entry.
+#i.e. those we can't do the ari calculation for.
+GCC16NA<-GCC16check[(is.na(GCC16check$yoa)&(GCC16check$iso3!="AUS"))|is.na(GCC16check$iso3)|(!is.na(GCC16check$yoa)& GCC16check$iso=="AUS")]
+sum(GCC16NA$pop,na.rm=TRUE)
+#2,023,969
+rm(GCC16check)
+
+##Creating an Australian born subset and removing those with an yoa entry
+GCC16Aust<-lapply(GCC16, function(df) {
+  df <- subset(df, df$iso3=="AUS")
+  df <- subset(df, is.na(df$yoa))
+  df
+})
+GCC16Austcheck<-rbindlist(GCC16Aust, idcol = "state")
+GCC16Austcheck$pop<-as.numeric(GCC16Austcheck$pop)
+sum(GCC16Austcheck$pop,na.rm=TRUE)
+#14,762,475 ALL GOOD!
+rm(GCC16Austcheck)
+
+##Removing all rows from the overseas groups with NA in yoa, i.e. those from Australia mostly
+GCC16<-lapply(GCC16, function(df) {
+  df <- df[!is.na(df$yoa), ]
+  df <- df[!is.na(df$iso3), ]
+  df <- df[df$iso3!="AUS",]
+  df
+})
+GCC16OBcheck<-rbindlist(GCC16, idcol = "state")
+GCC16OBcheck$pop<-as.numeric(GCC16OBcheck$pop)
+sum(GCC16OBcheck$pop,na.rm=TRUE)
+#5,236,146
+#19,998,621 altogether
+#+2,023,969  = 22,022,590 total 
+rm(GCC16OBcheck)
+
+#Reorder columns by country (alphabetical), yob (ascending), yoa (ascending) and creating unique IDs
+GCC16<-lapply(GCC16, function(df) {
+  df<-df[order(df$iso3,df$yob,df$yoa), ]
+  df$id <- seq.int(nrow(df))
+  df
+})
+GCC16Aust<-lapply(GCC16Aust, function(df) {
+  df<-df[order(df$yob), ]
+  df$id <- seq.int(nrow(df))
+  df
+})
+
+GCC16Aust<-lapply(GCC16Aust, function(df) {
+  df$pop<-as.numeric(df$pop)
+  df
+})
+
+GCC16<-lapply(GCC16, function(df) {
+  df$pop<-as.numeric(df$pop)
+  df
+})
+
+
+#Getting the file back in
+Austrisk16 <- read.csv("H:\\Katie\\PhD\\ABS data\\Australia 2016\\Austrisk16.csv",header=T)
+AustriskAustGCC16<-Austrisk16[Austrisk16$iso3=="AUS",] 
+AustriskAustGCC16<-AustriskAustGCC16[is.na(AustriskAustGCC16$yoa),] 
+
+
+# Aggregate all data by iso3, yoa and yob and then do the merge again and see of popsum is correct
+Austrisk16$cob<-NULL
+AustriskAustGCC16$cob<-NULL
+Austrisk16<-unique( Austrisk16[ , 3:206 ] )
+AustriskAustGCC16<-unique( AustriskAustGCC16[ , 3:206 ] )
+Austrisk16$pop<-NULL
+AustriskAustGCC16$pop<-NULL
+
+#Filling in the risk values based on the Australia wide data set
+#for overseasborn
+GCC16<-lapply(GCC16, function(df) {
+  df<-merge(df, Austrisk16[!duplicated(Austrisk16[c("yoa","iso3","yob")]),], by=c("yoa","iso3","yob"),  all.x = TRUE)
+  df
+})
+
+#for Australian born
+GCC16Aust<-lapply(GCC16Aust, function(df) {
+  df<-merge(df, AustriskAustGCC16[!duplicated(AustriskAustGCC16[c("yoa","iso3","yob")]),], by=c("yoa","iso3","yob"),  all.x = TRUE)
+  df
+})
+
+#Turning the lists into dataframes
+GCC16<-rbindlist(GCC16, idcol = "state")
+GCC16Aust<-rbindlist(GCC16Aust, idcol = "state")
+#Replacing all numbers with nothing in state column
+GCC16$state <- gsub("[0-9]+","",GCC16$state)
+GCC16Aust$state <- gsub("[0-9]+","",GCC16Aust$state)
+
+sum(GCC16$pop)
+#5,236,146
+
+sum(GCC16Aust$pop)
+#14,762,475
+#= 19,998,621
+
+#Reorder columns by country (alphabetical), yob (ascending), yoa (ascending) 
+GCC16<-GCC16[order(GCC16$iso3,GCC16$yob,GCC16$yoa), ]
+GCC16Aust<-GCC16Aust[order(GCC16Aust$iso3,GCC16Aust$yob,GCC16Aust$yoa), ]
+
+#Finding the entries that did not get filled. i.e. that didn't appear in the Australia wide dataset
+GCC16NF <- subset(GCC16,is.na(GCC16$V1))
+GCC16AustNF <- subset(GCC16Aust,is.na(GCC16Aust$V1))
+
+
+
+#Fixing those few that are NA
+#Loading the hazard data
+load("H:\\Katie\\PhD\\Houben and Dodd\\AAA_rundata-1.Rdata")
+tbhaz<-rundata
+rm(rundata)
+
+##Create an FOI variable?
+tbhaz$FOI <- exp(tbhaz$lari)
+tbhaz ["lari"]<- NULL
+
+##Subsetting all 2014 rows so I can create 2015 and 2016 data
+# with the same data and then append them on
+tbhaz2014 <- subset(tbhaz, tbhaz$year==2014)
+tbhaz2015 <- tbhaz2014
+tbhaz2015$year[tbhaz2015$year==2014] <- 2015
+tbhaz2016 <- tbhaz2014
+tbhaz2016$year[tbhaz2016$year==2014] <- 2016
+rm(tbhaz2014)
+tbhaz1516<-rbind(tbhaz2015,tbhaz2016)
+tbhaz<-rbind(tbhaz1516,tbhaz)
+tbhaz<-tbhaz[order(tbhaz$iso3,tbhaz$replicate,tbhaz$year), ]
+rownames(tbhaz) <- seq(length=nrow(tbhaz))
+rm(tbhaz1516)
+rm(tbhaz2015)
+rm(tbhaz2016)
+#Changing the FOI for 2016, so that represents part of the year only
+tbhaz$testari<-tbhaz$FOI*(220/365.2425)
+tbhaz$FOI[tbhaz$year==2016]<-tbhaz$testari[tbhaz$year==2016]
+tbhaz["testari"]<- NULL
+
+#Creating an FOI variable that is halved, to apply to year of birth and year of arrival
+tbhaz$halfFOI<- tbhaz$FOI/2
+
+#Creating an FOI variable that is quartered, to apply to year of birth and year of arrival
+tbhaz$quartFOI<- tbhaz$FOI/4
+
+##FUNCTIONS THAT WILL BE NEEDED
+## Full haz function
+haz.calc<-function(tbhz, fyear,fhaz) {
+  haz<-tbhz[(tbhz$year==fyear), "FOI"]
+  haz<-fhaz+haz
+  return(haz)
+}
+## Half haz function 
+halfhaz.calc<-function(tbhz,fyear,fhaz) {
+  halfhaz<-tbhz[(tbhz$year==fyear), "halfFOI"]
+  haz<-fhaz+halfhaz
+  return(haz)
+}
+## Quart haz function
+quarthaz.calc<-function(tbhz,fyear,fhaz) {
+  quarthaz<-tbhz[(tbhz$year==fyear), "quartFOI"]
+  haz<-fhaz+quarthaz
+  return(haz)
+}
+
+tbhzAust <- tbhaz[tbhaz$iso3=="AUS",]  
+
+
+#Reorder columns by country (alphabetical), yob (ascending), yoa (ascending) and creating unique IDs
+GCC16NF<- GCC16NF[,1:7]
+GCC16NF<-GCC16NF[order(GCC16NF$iso3,GCC16NF$yob,GCC16NF$yoa), ]
+GCC16NF$id <- seq.int(nrow(GCC16NF))
+
+##Creating matrices to accept all of the hazard values
+numrw <- nrow(GCC16NF)
+rawhaz <- matrix(data=0, nrow = numrw, ncol = 200)
+
+
+##Creating a list of the countries that the loops have to cycle through.
+ctrylist <- unique(as.character(GCC16NF$iso3))
+
+for (l in ctrylist) {
+  cn <- GCC16NF[GCC16NF$iso3==l,]
+  tbhzcn <- tbhaz[tbhaz$iso3==l,]
+  numRowscn <- nrow(cn)
+  lapply(1:200,function(x){
+    ##Creating dataframes only with replicate x
+    tbhz <- tbhzcn[tbhzcn$replicate==x,]
+    tbhzA <- tbhzAust[tbhzAust$replicate==x,]
+    for(i in 1:numRowscn) {
+      yobt<-cn[i,]$yob[1]
+      yoat<-cn[i,]$yoa[1]
+      id<-cn[i,]$id[1]
+      hazt<-0
+      #set the years before arrival to the number of years between yob and yoa
+      yearsbeforearrival<-yoat-yobt-1
+      #set the year of haz to the year following the year of birth
+      yearofhaz<-yobt+1
+      ##YOB
+      #If they were born and arrived in the same year then set the hazard in that year as quartfhaz for both cob and AUS
+      if ((yobt==yoat) & (yobt>1933)) {
+        hazt<-quarthaz.calc(tbhz,yobt,hazt)
+        hazt<-quarthaz.calc(tbhzA,yoat,hazt)
+      } else if ((yobt==yoat) & (yobt<1934)){
+        hazt<-quarthaz.calc(tbhz,1934,hazt)
+        hazt<-quarthaz.calc(tbhzA,1934,hazt)  
+        #Otherwise set the hazard in the year of birth as the half FOI 
+      } else if ((yobt!=yoat) & (yobt<1934)) {
+        hazt<-halfhaz.calc(tbhz,1934, hazt)
+      } else {
+        hazt<-halfhaz.calc(tbhz,yobt, hazt)
+      }
+      ##YEARS BETWEEN YOB AND YOA
+      if(yearsbeforearrival>0) {
+        for (j in 1:yearsbeforearrival) { 
+          if (yearofhaz<1934){
+            hazt<-haz.calc(tbhz,1934,hazt)
+            yearofhaz<-yearofhaz+1
+          } else {        
+            hazt<-haz.calc(tbhz,yearofhaz,hazt)
+            yearofhaz<-yearofhaz+1        
+          }
+        }
+      }
+      ##YOA
+      #within each row, for year of arrival:
+      #If they were born and arrived in the same year then I calculated 
+      #their haz in yoa above already.
+      if(yobt!=yoat){
+        if (yoat<1934){
+          hazt<-halfhaz.calc(tbhz,1934,hazt)
+          hazt<-halfhaz.calc(tbhzA,1934,hazt)
+          yearofhaz<-yoat+1
+        } else {        
+          hazt<-halfhaz.calc(tbhz,yoat,hazt)
+          hazt<-halfhaz.calc(tbhzA,yoat,hazt)
+          yearofhaz<-yoat+1
+        }
+      }
+      ##Between YOA and 2016
+      #within each row, for years between year of arrival and 2016:
+      if(yearofhaz<2017){
+        for (k in yearofhaz:2016) {  
+          if (yearofhaz<1934){
+            hazt<-haz.calc(tbhzA,1934,hazt)
+            yearofhaz<-yearofhaz+1
+          } else {
+            hazt<-haz.calc(tbhzA,yearofhaz,hazt)
+            yearofhaz<-yearofhaz+1
+          }
+        }
+      }
+      rawhaz[id,x]<<-hazt
+    }
+  })
+}
+
+#Create function to turn the hazards into risks
+haztorisk<-function(v) {
+  1-(exp(-v))
+}
+
+#Apply the above function to every element of the matrix and make it a 101 by 200 matrix again
+rawhazdf<- as.data.frame(rawhaz)
+rawrisk <- sapply(rawhazdf[,1:200], haztorisk)
+rawriskdf<- as.data.frame(rawrisk)
+
+##Creating unique IDs for rawriskdf, so I can merge it with census data
+rawriskdf$id <- seq.int(nrow(rawriskdf))
+
+#Merging it to the Australia census data
+GCC16NF <- merge(GCC16NF, rawriskdf,by=c('id'))
+
+#Australian NFs 
+GCC16AustNF <- subset(GCC16Aust,is.na(GCC16Aust$V1))
+GCC16AustNF<- GCC16AustNF[,1:7]
+GCC16AustNF<-GCC16AustNF[order(GCC16AustNF$iso3,GCC16AustNF$yob,GCC16AustNF$yoa), ]
+GCC16AustNF$id <- seq.int(nrow(GCC16AustNF))
+
+##Creating matrices to accept all of the hazard values
+numrw <- nrow(GCC16AustNF)
+rawhazAust <- matrix(data=0, nrow = numrw, ncol = 200)
+
+##Hazard calculation for Austborn
+lapply(1:200,function(x){
+  tbhz <- tbhzAust[tbhzAust$replicate==x,]
+  numrwA <- nrow(GCC16AustNF)
+  for(i in 1:numrwA) {
+    yobt<-GCC16AustNF[i,]$yob
+    hazt<-0
+    #set the year of haz to the year following the year of birth
+    yearofhaz<-yobt+1
+    #If they were born and arrived in 2016 then apply halfari for both cob and Aust
+    if(yobt==2016) {
+      hazt<-halfhaz.calc(tbhz,2016,hazt) 
+      #Set the haz as the half FOI in the year of birth
+    } else if (yobt<1934) {
+      #for <1934 group - setting the hazard to the halfFOI in the year of birth:
+      hazt<-halfhaz.calc(tbhz,1934,hazt)
+    } else {
+      hazt<-halfhaz.calc(tbhz,yobt,hazt)
+    }
+    #within each row, for years between year of birth and 2016:
+    for (k in yearofhaz:2016) {  
+      if(yearofhaz>2016){
+        next
+      } else if(yearofhaz<1934){
+        hazt<-haz.calc(tbhz,1934,hazt)
+        yearofhaz<-yearofhaz+1
+      } else {
+        hazt<-haz.calc(tbhz,yearofhaz,hazt)
+        yearofhaz<-yearofhaz+1
+      }
+    }
+    rawhazAust[i,x]<<-hazt
+  }
+})
+
+#Create function to turn the hazards into risks
+haztorisk<-function(v) {
+  1-(exp(-v))
+}
+#Apply the above function to every element of the matrix 
+GCC16AustNFrisk<-lapply(rawhazAust, haztorisk) 
+GCC16AustNFrisk<-as.data.frame(GCC16AustNFrisk)
+GCC16AustNFrisk$id <- seq.int(nrow(GCC16AustNFrisk))
+GCC16AustNFrisk <- merge(GCC16AustNF,GCC16AustNFrisk,by="id")
+
+(Vcolnam <- paste0(c("V"),1:200))
+colnames(GCC16AustNFrisk)[9:208] <- Vcolnam
+
+#Combining NA and non-NA  data sets
+GCC16$id<-NULL
+GCC16NF$id<-NULL
+GCC16Aust$id<-NULL
+GCC16AustNFrisk$id<-NULL
+#Remove NA rows from original dataset 
+GCC16 <-GCC16[complete.cases(GCC16[ , 8:207]),]
+GCC16Aust <-GCC16Aust[complete.cases(GCC16Aust[ , 8:207]),]
+GCC16risk<-rbind(GCC16,GCC16NF)
+GCC16Austrisk<-rbind(GCC16Aust,GCC16AustNFrisk)
+GCC16risk<-rbind(GCC16risk,GCC16Austrisk)
+
+#Reorder columns by country (alphabetical), yob (ascending), yoa (ascending) and creating unique IDs
+GCC16risk<-GCC16risk[order(GCC16risk$iso3,GCC16risk$yob,GCC16risk$yoa), ]
+GCC16risk$id <- seq.int(nrow(GCC16risk))
+
+sum(GCC16risk$pop)
+#19,998,621
+
+
+#Export it to csv
+write.csv(GCC16risk,file="GCCrisk16.csv") # keeps the rownames
+
+#Check
+GCC16risktest <- read.csv("H:\\Katie\\PhD\\ABS data\\Greater capital city statistical areas\\2016 Greater capital city SA\\GCCrisk16.csv",header=T)
+
+

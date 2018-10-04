@@ -1,0 +1,22 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1519098323915.000,
+    "dirty" : true,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "8060A8F6",
+    "lastKnownWriteTime" : 1519186869,
+    "last_content_update" : 1519249348416,
+    "path" : "H:/Katie/PhD/LTBI project/R/Main data analysis.R",
+    "project_path" : null,
+    "properties" : {
+        "cursorPosition" : "410,0",
+        "scrollLine" : "382"
+    },
+    "relative_order" : 2,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}
