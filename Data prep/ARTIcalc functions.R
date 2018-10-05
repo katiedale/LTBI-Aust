@@ -19,9 +19,9 @@ AustbornTBriskcalc <-function(dt,repnumber) {
   dt$id <- seq.int(nrow(dt))
   #Loading the hazard data - choose relevant location
   ####################################################################
-  setwd("H:/Katie/PhD/LTBI project/R/Houben and Dodd/")
-  ####################################################################
-  filename <- paste(repnumber,'repLARI.Rdata',sep = "")
+  precede <- paste(repnumber,'repLARI.Rdata',sep = "")
+  mm<-"Data/"
+  filename <- paste(mm,precede,sep = "") 
   loading <- function(dataset){
     merchants <- load(dataset)
     return(get(merchants))
@@ -154,9 +154,9 @@ TBriskcalc <-function(DT,repnumber) {
   censusyear<-DT$year[1]
   #Loading the hazard data - choose relevant location
   ####################################################################
-  setwd("H:/Katie/PhD/LTBI project/R/Houben and Dodd/")
-  ####################################################################
-  filename <- paste(repnumber,'repLARI.Rdata',sep = "")
+  precede <- paste(repnumber,'repLARI.Rdata',sep = "")
+  mm<-"Data/"
+  filename <- paste(mm,precede,sep = "") 
   loading <- function(dataset){
     merchants <- load(dataset)
     return(get(merchants))
@@ -392,9 +392,9 @@ TBriskcalc_onarrival <-function(DT,repnumber) {
   censusyear<-DT$year[1]
   #Loading the hazard data - choose relevant location
   ####################################################################
-  setwd("H:/Katie/PhD/LTBI project/R/Houben and Dodd/")
-  ####################################################################
-  filename <- paste(repnumber,'repLARI.Rdata',sep = "")
+  precede <- paste(repnumber,'repLARI.Rdata',sep = "")
+  mm<-"Data/"
+  filename <- paste(mm,precede,sep = "") 
   loading <- function(dataset){
     merchants <- load(dataset)
     return(get(merchants))
@@ -632,9 +632,9 @@ TBriskcalc_allbutrecent<- function(DT,repnumber){
   censusyear<-DT$year[1]
   #Loading the hazard data - choose relevant location
   ####################################################################
-  setwd("H:/Katie/PhD/LTBI project/R/Houben and Dodd/")
-  ####################################################################
-  filename <- paste(repnumber,'repLARI.Rdata',sep = "")
+  precede <- paste(repnumber,'repLARI.Rdata',sep = "")
+  mm<-"Data/"
+  filename <- paste(mm,precede,sep = "") 
   loading <- function(dataset){
     merchants <- load(dataset)
     return(get(merchants))
