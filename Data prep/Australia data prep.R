@@ -23,24 +23,9 @@
 
 # Abnum5k - 5000 estimates of the of the number of Australian-born residents with LTBI
 
-
-library(TTR)
-library(zoo)
-library(plyr)
 library(data.table)
-library(stringr)
-library(quantmod)
-library(dplyr)
-library(sm)
 library(reshape2)
 library(countrycode)
-library(ggplot2)
-library(reshape2)
-library(bindr)
-library(stringi)
-library(tidyr)
-library(tidyselect)
-
 
 #Loading the the Australian Census data - choose relevant location
 ####################################################################
